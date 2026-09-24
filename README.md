@@ -61,7 +61,7 @@ Each catalogue writes four CSVs:
 
 | File | Contents |
 |---|---|
-| `forward_mock_restframe_empirical_clustered_<name>.csv` | Galaxies: position, redshift, environment, physical properties, and bulge/disc/total photometry and structure |
+| `mock_catalogue_<name>.csv` | Galaxies: position, redshift, environment, physical properties, and bulge/disc/total photometry and structure |
 | `…_clumps.csv` | Star-forming clumps: parent id, offsets, width, per-band flux |
 | `…_tidal.csv` | Tidal-bridge blobs: one row per blob and band |
 | `…_tidal_pairs.csv` | The interacting pairs |

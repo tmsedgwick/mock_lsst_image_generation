@@ -91,7 +91,7 @@ PHYS = dict(
 
 # Catalogues are statistically identical, independent realisations of the same frame: only the seed differs.
 N_CATALOGUES = 4  # default: train, valid, calib, test
-CATALOGUE_STEM = "forward_mock_restframe_empirical_clustered"
+CATALOGUE_STEM = "mock_catalogue"
 
 
 def catalogue_splits(n_catalogues=N_CATALOGUES):

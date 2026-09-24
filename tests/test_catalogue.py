@@ -79,6 +79,6 @@ def test_same_seed_same_catalogue_different_seed_differs(cosmos, catalogue):
 
 def test_generate_writes_all_csvs(cosmos, tmp_path):
     quiet(generate_mock_catalogues, cosmos, 1, tmp_path, cfg=dict(npix=300))
-    stem = tmp_path / "forward_mock_restframe_empirical_clustered_train"
+    stem = tmp_path / "mock_catalogue_train"
     for suffix in ["", "_clumps", "_tidal", "_tidal_pairs"]:
         assert (tmp_path / f"{stem.name}{suffix}.csv").exists(), suffix
