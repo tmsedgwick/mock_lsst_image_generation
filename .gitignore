@@ -1,0 +1,16 @@
+.vscode/
+.venv/
+__pycache__/
+*.egg-info/
+build/
+dist/
+.ipynb_checkpoints/
+.DS_Store
+
+# Data products and inputs (large; keep out of git)
+*.csv
+*.npz
+*.npy
+*.fits
+# Shipped COSMOS2025 subset (17 MB)
+!data/cosmos2025_subset.npz

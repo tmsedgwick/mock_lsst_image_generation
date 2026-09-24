@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mock_lsst_image_generation"
+version = "0.1.0"
+license = "MIT"
+authors = [{ name = "Tom Sedgwick", email = "t.m.sedgwick@outlook.com" }]
+description = "Mock LSST-like galaxy catalogues and images for training and testing source detectors"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.24", "pandas>=2.0", "scipy>=1.10"]
+
+[tool.setuptools.packages.find]
+include = ["mock_lsst_image_generation*"]
+
+[tool.ruff]
+line-length = 120

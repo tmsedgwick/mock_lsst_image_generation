@@ -1,0 +1,104 @@
+"""Default settings for mock-catalogue generation.
+
+CONFIG covers the survey frame, COSMOS donor selection, sampling and feature switches; PHYS holds physical scaling
+relations. build_mock_catalogue fills any key you leave out from these defaults, so overrides can be partial,
+e.g. ``build_mock_catalogue(cosmos, dict(npix=2000, seed=7))``. A cut or limit set to None is disabled.
+"""
+
+OUT_BANDS = ["u", "g", "r", "i", "z", "y"]
+
+CONFIG = dict(
+    out_bands=OUT_BANDS,
+    # COSMOS input columns (standardise_cosmos_columns also tries common aliases).
+    z_col="zfinal", mass_col="mass_med", sfr_col="sfr_med", ssfr_col="ssfr_med", sfr_is_log=True,
+    re_arcsec_col="radius_sersic_arcsec", ellipticity_col="ellipticity",
+    # Square survey frame, redshift/mass range, cosmology and RNG seed.
+    npix=5000, pixscale=0.2, z_min=0.0, z_max=6.0, logm_min=7.0, logm_max=12.0, H0=70.0, Om0=0.3, seed=42,
+    # Continuous COSMOS-style GSMF sampling. Redshifts come from clustered light-cone sites, which are thinned by the
+    # total evolving number density.
+    gsmf_n_z=700, gsmf_n_m=900, gsmf_z_eval_min=0.2, gsmf_z_eval_max=5.5, gsmf_poisson_counts=True,
+    gsmf_position_oversample=4,
+    # Low-z COSMOS2025 empirical sSFR PDFs, split into SF/passive samples and evolved to each galaxy's redshift.
+    ssfr_pdf_z_min=0.0, ssfr_pdf_z_max=0.3, ssfr_split=-10.0, ssfr_pdf_k=160, ssfr_reference_z=0.15,
+    ssfr_min=-15.5, ssfr_max=-6.5,
+    # Empirical rest-frame PDF p(SED, Re, ellipticity | logM, logsSFR) built from COSMOS donors.
+    pdf_xcols=["logM", "logsSFR"], empirical_k=256, empirical_clip_percentiles=(0.5, 99.5),
+    min_training_bands=4, allow_sed_extrapolation=True, warn_edge_distance=0.35, max_rest_edge_distance=0.55,
+    # COSMOS donor quality cuts, restricted to bright, reliable HSC-r model magnitudes.
+    cosmos_training_z_max=6.0, cosmos_training_logm_min=7.0, cosmos_training_logm_max=12.0,
+    cosmos_training_logssfr_min=-15.5, cosmos_training_logssfr_max=-7.0,
+    cosmos_training_r_mag_min=20.0, cosmos_training_r_mag_max=24.0, cosmos_training_r_magerr_max=0.2,
+    cosmos_training_ellipticity_min=0.01, cosmos_training_ellipticity_max=0.95,
+    cosmos_training_mag_max=32.0, cosmos_training_require_all_obs_bands=True,
+    cosmos_apparent_colour_limits=[("obs_u", "obs_g", -3.0, 6.0), ("obs_g", "obs_r", -3.0, 6.0),
+                                   ("obs_r", "obs_i", -3.0, 6.0), ("obs_i", "obs_z", -3.0, 6.0),
+                                   ("obs_z", "obs_y", -3.0, 6.0)],
+    # Reject sharp observed-frame SED zig-zags, e.g. a single depressed r band making sources look purple in gri RGB.
+    cosmos_observed_colour_curvature_max=1.0,
+    # HSC g/r/i colour quality: colour errors and a robust g-r/r-i colour-plane ellipse.
+    cosmos_gr_ri_colour_error_max=0.15, cosmos_gr_ri_colour_plane_sigma=4.0, cosmos_gr_ri_colour_plane_min_fit=300,
+    # Very large galaxies look unphysical when the donor gives them extreme flattening: cap only the large-Re tail.
+    large_re_ellipticity_cap_arcsec=1.0, large_re_ellipticity_cap=0.8,
+    # Rest-frame SED sanity cuts, deliberately broad: reject broken/interpolated SEDs without forcing a narrow locus.
+    rest_abs_mag_min=-30.0, rest_abs_mag_max=5.0,
+    rest_abs_mag_faint_limits=dict(M0900=12.0, M1216=8.0, M1500=8.0, M1900=6.0, M2200=6.0, M2500=6.0,
+                                   Mu=5.0, Mg=5.0, Mr=5.0, Mi=5.0, Mz=5.0, My=5.0),
+    rest_colour_curvature_max=1.0,  # zig-zags between adjacent rest-frame nodes
+    rest_colour_limits=[("M0900", "M1216", -0.5, 8.0), ("M1216", "M1500", -2.5, 5.0), ("M1500", "M1900", -3.0, 5.0),
+                        ("M1900", "M2200", -3.0, 4.0), ("M2200", "M2500", -3.0, 4.0), ("M2500", "Mu", -3.0, 5.0),
+                        ("Mu", "Mg", -2.5, 4.0), ("Mg", "Mr", -2.5, 4.0), ("Mr", "Mi", -2.0, 3.0),
+                        ("Mi", "Mz", -2.0, 3.0), ("Mz", "My", -2.0, 3.0), ("M1500", "Mr", -3.0, 6.0),
+                        ("Mu", "Mr", -2.0, 4.0), ("Mg", "Mi", -1.5, 3.5)],
+    mock_observed_mag_min=10.0,
+    # Surface-brightness definition and final cuts on what is worth rendering.
+    sb_re_mode="circularized", render_mu_r_max=30.0, render_mag_r_max=None,
+    # Bulge/disc structure.
+    bulge_re_frac=0.20,
+    bulge_disc_q_coupling=0.75,  # stronger = bulge follows an edge-on disc more
+    bulge_disc_q_offset=0.16,  # bulge stays rounder than the disc by this amount in q
+    bulge_q_min=0.18, bulge_q_max=0.95,
+    bulge_edgeon_q0=0.60,  # coupling only becomes important below this disc q
+    # Positions: one coherent light-cone cosmic web, calibrated on a 100 Mpc toy cube. With
+    # assign_positions_after_observables the finished galaxies are re-placed onto web sites by environment score.
+    clustered_positions=True, assign_positions_after_observables=False,
+    web_parent_pad_mpc=35.0, web_candidate_oversample=8,
+    web_n_nodes_100mpc=60, web_node_boost=1.0, web_f_cluster=0.20, web_f_filament=0.36, web_r_cluster=5.0,
+    web_sig_filament=1.2, web_core_frac=0.30, web_k_extra=3, web_k_connect=16, web_max_extra=22.0,
+    web_n_super=8, web_super_sigma=18.0, web_frac_lss=0.65,  # large-scale modulation of the node field
+    web_assign_bin_mpc=15.0, web_site_keep_bias=0.08, env_assign_scatter=0.75,  # site assignment in narrow shells
+    # Star-forming clumps.
+    sf_clumps=True, clump_mean_single_u_frac=0.0035, clump_max_r_re=2.0, clump_central_hole_re=1.0,
+    clump_flux_radius_bias=0.0, clump_flux_scatter=0.35, clump_sigma_floor_arcsec=0.01, clump_n_max_per_gal=64,
+    # Tidal bridges between interacting pairs. Targets are fractions of galaxies per environment, not per-pair
+    # probabilities; the candidate pool is loose enough for this light-cone mock.
+    tidal_streams=True, tidal_target_field=0.02, tidal_target_filament=0.08, tidal_target_cluster=0.04,
+    tidal_pair_rp_min_mpc=0.02, tidal_pair_rp_max_mpc=0.60, tidal_pair_dchi_max_mpc=25.0,
+    tidal_pa_scatter_deg=18.0, tidal_anchor_radius_re=2.0, tidal_flux_frac_min=0.03, tidal_flux_frac_max=0.08,
+    tidal_column_sig_re_frac_min=0.28, tidal_column_sig_re_frac_max=0.44,
+    tidal_column_sig_pix_min=4.4, tidal_column_sig_pix_max=9.6,
+    tidal_n_curve=9, tidal_n_straight=11, tidal_curve_strength=0.7, tidal_inward_pull=0.45,
+    # Clumps and tidal features only go on resolved galaxies: resolved_re_col > PSF FWHM in resolved_psf_band.
+    psf_fwhm_arcsec=dict(u=1.16, g=1.11, r=1.05, i=1.01, z=0.97, y=0.95), resolved_psf_band="r",
+    resolved_re_col="re_total_arcsec",
+)
+
+PHYS = dict(
+    passive_logssfr_z_slope=0.4,  # passive sSFR evolution about the low-z reference (SF follows the main sequence)
+    bt_conc=6.0,  # Beta-distribution concentration of the B/T scatter
+    bulge_ba=dict(mean=0.80, sig=0.08, lo=0.5, hi=0.95),  # intrinsic spheroid axis ratio
+    bulge_ml_ratio=dict(u=3.0, g=2.5, r=1.8, i=1.5, z=1.35, y=1.25),  # (M/L)_bulge / (M/L)_disc per band
+)
+
+# Catalogues are statistically identical, independent realisations of the same frame: only the seed differs.
+N_CATALOGUES = 4  # default: train, valid, calib, test
+CATALOGUE_STEM = "forward_mock_restframe_empirical_clustered"
+
+
+def catalogue_splits(n_catalogues=N_CATALOGUES):
+    """{name: seed} for n realisations: train, valid, calib, test (seeds 42, 101, 202, 303), then extra1, extra2, ...
+    (seeds 404, 505, ...). Realisation k always has the same name and seed, so adding more never changes the rest."""
+    if n_catalogues < 1:
+        raise ValueError(f"n_catalogues must be at least 1, got {n_catalogues}")
+    names = ["train", "valid", "calib", "test"][:n_catalogues]
+    names += [f"extra{k}" for k in range(1, n_catalogues - len(names) + 1)]
+    return {name: 42 if k == 0 else 101 * k for k, name in enumerate(names)}
