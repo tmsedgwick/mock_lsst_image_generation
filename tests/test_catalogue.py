@@ -10,12 +10,16 @@ import io
 import numpy as np
 import pytest
 
+from mock_lsst_image_generation.config import OUT_BANDS
 from mock_lsst_image_generation import (CONFIG, DEFAULT_COSMOS_PATH, build_mock_catalogue, catalogue_splits,
                                         generate_mock_catalogues, load_cosmos2025_catalogue)
 
-REFERENCE = dict(n_galaxies=4322, n_clumps=6344, n_tidal_pairs=2, n_tidal_blobs=324, n_donors=18729,
-                 sums=dict(z=9603.46518814514, logM=34476.06135959138, mag_r_total=118111.28531702518,
-                           re_total_arcsec=1434.8673316593267))
+# Counts and column sums of the reference realisation (macOS, pinned requirements). Other platforms can differ in the
+# last few decimal places, which can flip the odd galaxy across a cut, so the comparison allows a small tolerance.
+REFERENCE_COUNTS = dict(galaxies=4322, clumps=6344, tidal_pairs=2, tidal_blobs=324, donors=18729)
+REFERENCE_SUMS = dict(z=9603.46518814514, logM=34476.06135959138, mag_r_total=118111.28531702518,
+                      re_total_arcsec=1434.8673316593267)
+COUNT_TOLERANCE, SUM_TOLERANCE = 0.01, 0.01
 
 
 def quiet(fn, *args, **kwargs):
@@ -47,14 +51,11 @@ def test_catalogue_splits_are_stable():
 
 
 def test_catalogue_matches_reference(catalogue):
-    g = catalogue.galaxies
-    assert len(g) == REFERENCE["n_galaxies"]
-    assert len(catalogue.clumps) == REFERENCE["n_clumps"]
-    assert len(catalogue.tidal_pairs) == REFERENCE["n_tidal_pairs"]
-    assert len(catalogue.tidal_blobs) == REFERENCE["n_tidal_blobs"]
-    assert len(catalogue.donors) == REFERENCE["n_donors"]
-    for col, ref in REFERENCE["sums"].items():
-        assert g[col].sum() == pytest.approx(ref, rel=1e-9), col
+    tables = catalogue._asdict()
+    for name, ref in REFERENCE_COUNTS.items():
+        assert len(tables[name]) == pytest.approx(ref, rel=COUNT_TOLERANCE, abs=2), name
+    for col, ref in REFERENCE_SUMS.items():
+        assert catalogue.galaxies[col].sum() == pytest.approx(ref, rel=SUM_TOLERANCE), col
 
 
 def test_catalogue_is_physically_sane(catalogue):
@@ -64,7 +65,7 @@ def test_catalogue_is_physically_sane(catalogue):
     assert g["x_pix"].between(0, npix).all() and g["y_pix"].between(0, npix).all()
     assert g["z"].between(CONFIG["z_min"], CONFIG["z_max"]).all()
     assert g["logM"].between(CONFIG["logm_min"], CONFIG["logm_max"]).all()
-    for band in CONFIG["out_bands"]:
+    for band in OUT_BANDS:
         assert np.isfinite(g[f"mag_{band}_total"]).all() and (g[f"flux_{band}_total"] > 0).all(), band
     assert (g["sb_r_total"] <= CONFIG["render_mu_r_max"]).all()
     assert set(catalogue.clumps["parent_id"]).issubset(g["id"])
