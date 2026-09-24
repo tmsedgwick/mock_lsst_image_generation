@@ -5,15 +5,12 @@ Every galaxy is a known truth entry, so any detector's completeness and purity c
 
 ## What the catalogue models
 
-| Ingredient | Model | Module |
-|---|---|---|
-| Positions and environment | A coherent light-cone cosmic web (nodes, filaments, cluster cores and outskirts, field). Its sites are thinned by the evolving GSMF number density, which gives the mock realistic clustering and a `web_env` label per galaxy | `cosmic_web_generation`, `environment_sampling` |
-| Type and stellar mass | Evolving star-forming and quiescent GSMFs (continuous fits to COSMOS2020) | `gsmf_sampling` |
-| sSFR | Empirical low-z COSMOS2025 p(sSFR \| M) per type, evolved along the main sequence | `ssfr_sampling` |
-| SED and size | Rest-frame SED and size cloned from quality-cut COSMOS2025 donors, then projected to LSST ugrizy | `donor_selection`, `rest_frame_sed_sampling`, `photometry` |
-| Structure | Bulge + disc: B/T from a Dimauro et al. (2022)-derived fit, per-band light fractions, coupled ellipticities | `bulge_disc_decomposition` |
-| Star-forming clumps | Blue Gaussian knots in resolved star-forming discs | `sf_clump_generation` |
-| Tidal features | Curved bridges of Gaussian blobs between interacting pairs | `tidal_stream_generation` |
+- **Positions:** galaxies placed on a cosmic web (clusters, filaments, field) along a light cone
+- **Type and stellar mass:** evolving star-forming and quiescent stellar mass functions
+- **Star formation, colours and sizes:** drawn from similar real galaxies in COSMOS2025 and shifted to each mock
+  galaxy's redshift, giving LSST ugrizy photometry
+- **Structure:** bulge + disc
+- **Extras:** star-forming clumps and tidal bridges between interacting pairs
 
 `catalogue_pipeline.build_mock_catalogue` ties these together. All settings live in `config.py`
 (`CONFIG`, `PHYS`); pass a partial dict to override any of them.
@@ -22,7 +19,7 @@ Every galaxy is a known truth entry, so any detector's completeness and purity c
 
 | Path | Contents |
 |---|---|
-| `mock_lsst_image_generation/` | The package: one module per model ingredient (table above), `config.py` for all settings |
+| `mock_lsst_image_generation/` | The package: one module per model ingredient, `config.py` for all settings |
 | `scripts/generate_mock_catalogues.py` | Command-line entry point |
 | `data/cosmos2025_subset.npz` | Shipped COSMOS2025 input (see below) |
 | `tests/` | pytest suite, run by GitHub Actions on every push |
