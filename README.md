@@ -25,6 +25,7 @@ Every galaxy is a known truth entry, so any detector's completeness and purity c
 | `mock_lsst_image_generation/` | The package: one module per model ingredient (table above), `config.py` for all settings |
 | `scripts/generate_mock_catalogues.py` | Command-line entry point |
 | `data/cosmos2025_subset.npz` | Shipped COSMOS2025 input (see below) |
+| `tests/` | pytest suite, run by GitHub Actions on every push |
 
 ## Install
 
@@ -78,6 +79,18 @@ cat = build_mock_catalogue(cosmos, dict(seed=7, npix=2000))  # any CONFIG key ca
 cat.galaxies, cat.clumps, cat.tidal_blobs, cat.tidal_pairs
 save_mock_catalogue(cat, "my_mock.csv")
 ```
+
+## Tests
+
+```bash
+pip install pytest
+pytest -q
+```
+
+The tests (about 15 s) build small catalogues from the shipped subset and check they are sane, reproducible, and
+unchanged from the reference realisation pinned in `tests/test_catalogue.py`. GitHub Actions runs them on every push
+(`.github/workflows/tests.yml`). If you change the model on purpose, the reference test will fail: check the new
+catalogue, then update `REFERENCE`.
 
 ## Licence and data credit
 
