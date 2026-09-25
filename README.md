@@ -126,6 +126,80 @@ Rendering is the slow step; it runs in parallel over `--n-workers` processes (de
 Bands are in `ugrizy` order. A catalogue position (`x_pix`, `y_pix`) falls in array pixel
 `[:, round(y_pix) - origin_y, round(x_pix) - origin_x]`, with `origin` from `base_meta.json`.
 
+## Example commands
+
+Run from the repo folder with the environment active (`source .venv/bin/activate`). The folders under `~/mocks` are
+just examples; use any location outside the repo.
+
+**Catalogues**
+
+```bash
+# Default: 4 catalogues (train, valid, calib, test), 5000 x 5000 px
+python scripts/generate_mock_catalogues.py --out-dir ~/mocks/catalogues
+
+# 6 catalogues: train, valid, calib, test, extra1, extra2
+python scripts/generate_mock_catalogues.py --out-dir ~/mocks/catalogues --n-catalogues 6
+
+# Numbered instead of train/valid/...: mock_catalogue_1, _2, _3
+python scripts/generate_mock_catalogues.py --out-dir ~/mocks/catalogues --n-catalogues 3 --numbered
+
+# One small, quick catalogue (1000 x 1000 px, 'train')
+python scripts/generate_mock_catalogues.py --out-dir ~/mocks/catalogues --n-catalogues 1 --npix 1000
+
+# Use the full COSMOS2025 catalogue instead of the shipped subset
+python scripts/generate_mock_catalogues.py --out-dir ~/mocks/catalogues --cosmos /path/to/cosmos2025_cat.npz
+```
+
+**Images: the full depth x seeing grid**
+
+```bash
+# Every catalogue; all 42 coadds listed, saved for all but train/valid (rebuilt on the fly in training)
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images
+
+# Save every coadd of every catalogue (~200 GB at full size)
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --all-images
+
+# Only some catalogues
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --catalogue test
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --catalogue calib test
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --catalogue 2
+```
+
+**Images: one coadd per catalogue**
+
+```bash
+# 10-year depth at the nominal PSF
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --epoch 10y
+
+# Other depths: 1m ... 11m, 1y ... 10y
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --epoch 1y
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --epoch 6m --catalogue test
+
+# Custom depth and seeing: 50 r-band visits at 1.3" r-band FWHM (both flags required)
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --n-exp 50 --psf-fwhm 1.3
+
+# Worst-case seeing at full 10-year depth (184 r-band visits)
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --n-exp 184 --psf-fwhm 2.0
+
+# More parallel rendering processes (default: up to 8)
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --n-workers 10
+```
+
+**Quick end-to-end test**
+
+```bash
+python scripts/generate_mock_catalogues.py --out-dir ~/mocks/test/catalogues --n-catalogues 1 --npix 1000
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/test/catalogues --out-dir ~/mocks/test/images --epoch 10y
+```
+
+**Help and tests**
+
+```bash
+python scripts/generate_mock_catalogues.py --help
+python scripts/generate_mock_images.py --help
+pytest -q
+```
+
 ## Python API
 
 ```python
