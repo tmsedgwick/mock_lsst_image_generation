@@ -5,9 +5,11 @@ relations. build_mock_catalogue fills any key you leave out from these defaults,
 e.g. ``build_mock_catalogue(cosmos, dict(npix=2000, seed=7))``. A cut or limit set to None is disabled.
 """
 
+from typing import Any
+
 OUT_BANDS = ["u", "g", "r", "i", "z", "y"]
 
-CONFIG = dict(
+CONFIG: dict[str, Any] = dict(
     out_bands=OUT_BANDS,
     # COSMOS input columns (standardise_cosmos_columns also tries common aliases).
     z_col="zfinal", mass_col="mass_med", sfr_col="sfr_med", ssfr_col="ssfr_med", sfr_is_log=True,
@@ -82,7 +84,7 @@ CONFIG = dict(
     resolved_re_col="re_total_arcsec",
 )
 
-PHYS = dict(
+PHYS: dict[str, Any] = dict(
     passive_logssfr_z_slope=0.4,  # passive sSFR evolution about the low-z reference (SF follows the main sequence)
     bt_conc=6.0,  # Beta-distribution concentration of the B/T scatter
     bulge_ba=dict(mean=0.80, sig=0.08, lo=0.5, hi=0.95),  # intrinsic spheroid axis ratio
@@ -90,8 +92,37 @@ PHYS = dict(
 )
 
 # Catalogues are statistically identical, independent realisations of the same frame: only the seed differs.
-N_CATALOGUES = 4  # default: train, valid, calib, test
+CATALOGUE_NAMES = ["train", "valid", "calib", "test"]  # then extra1, extra2, ...
+N_CATALOGUES = len(CATALOGUE_NAMES)
 CATALOGUE_STEM = "mock_catalogue"
+
+IMAGE_CONFIG: dict[str, Any] = dict(
+    bands=OUT_BANDS, pixscale=CONFIG["pixscale"], zeropoint=31.4,  # catalogue fluxes are nJy, AB zeropoint 31.4
+    # Nominal 10-year median-seeing PSF FWHM per band (arcsec, PSTN-054). Also sets the band-to-band seeing ratios.
+    nominal_fwhm=CONFIG["psf_fwhm_arcsec"],
+    # 10-year 5-sigma point-source depth (AB) and number of visits per band (Ivezic et al., LSST survey strategy).
+    depth_10yr=dict(u=26.2, g=27.4, r=27.6, i=26.9, z=26.1, y=24.8),
+    visits_10yr=dict(u=56, g=80, r=184, i=185, z=160, y=160),
+    # The scene is rendered once at this narrow PSF (arcsec) and broadened to each target, so it must be narrower
+    # than every target PSF.
+    base_fwhm=0.45,
+    # Depth axis: survey epoch -> fraction of the 10-year visits.
+    epochs={"1m": 1.0 / 120.0, "6m": 0.05, "1y": 0.10, "3y": 0.30, "5y": 0.50, "8y": 0.80, "10y": 1.00},
+    # Seeing axis: r-band coadd PSF FWHM (arcsec); other bands follow the nominal ratios with a small random jitter.
+    fwhm_grid_r=[0.7, 0.9, 1.1, 1.3, 1.5, 2.0], fwhm_ratio_jitter=0.03,
+    # Catalogues whose coadds are saved by default. Training code rebuilds the others on the fly from the base image.
+    saved_catalogues=["calib", "test"],
+    min_stamp_pix=25,  # smallest GalSim stamp; there is deliberately no maximum, so no flux is clipped
+)
+
+
+def catalogue_index(name):
+    """Position of a catalogue in the train, valid, calib, test, extra1, extra2, ... sequence."""
+    if name in CATALOGUE_NAMES:
+        return CATALOGUE_NAMES.index(name)
+    if name.startswith("extra") and name[5:].isdigit() and int(name[5:]) >= 1:
+        return len(CATALOGUE_NAMES) + int(name[5:]) - 1
+    raise ValueError(f"Unknown catalogue name {name!r}: expected one of {CATALOGUE_NAMES} or extra1, extra2, ...")
 
 
 def catalogue_splits(n_catalogues=N_CATALOGUES):
@@ -99,6 +130,6 @@ def catalogue_splits(n_catalogues=N_CATALOGUES):
     (seeds 404, 505, ...). Realisation k always has the same name and seed, so adding more never changes the rest."""
     if n_catalogues < 1:
         raise ValueError(f"n_catalogues must be at least 1, got {n_catalogues}")
-    names = ["train", "valid", "calib", "test"][:n_catalogues]
+    names = CATALOGUE_NAMES[:n_catalogues]
     names += [f"extra{k}" for k in range(1, n_catalogues - len(names) + 1)]
     return {name: 42 if k == 0 else 101 * k for k, name in enumerate(names)}

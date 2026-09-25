@@ -8,6 +8,8 @@ dist/
 .DS_Store
 
 # Data products and inputs (large; keep out of git)
+catalogues/
+images/
 *.csv
 *.npz
 *.npy

@@ -32,13 +32,13 @@ from .utils import combined_mask, print_cut_summary
 
 class MockCatalogue(NamedTuple):
     """One realisation: the galaxy table, its clumps, tidal-bridge blobs and interacting pairs, plus the fitted
-    rest-frame PDF and the COSMOS donor table it was trained on (useful for diagnostics)."""
+    rest-frame PDF and the COSMOS donor table it was trained on (useful for diagnostics; None when read from disk)."""
     galaxies: pd.DataFrame
     clumps: pd.DataFrame
     tidal_blobs: pd.DataFrame
     tidal_pairs: pd.DataFrame
-    rest_frame_pdf: RestFrameEmpiricalPDF
-    donors: pd.DataFrame
+    rest_frame_pdf: RestFrameEmpiricalPDF | None = None
+    donors: pd.DataFrame | None = None
 
 
 def draw_physical_catalogue(cfg, phys, rng, grids, ssfr_pdf):
@@ -168,6 +168,18 @@ def save_mock_catalogue(catalogue, out_csv):
                                (catalogue.tidal_pairs, f"{stem}_tidal_pairs.csv", "tidal pairs")]:
         table.to_csv(path, index=False)
         print(f"Wrote {len(table):,} {label} -> {path}")
+
+
+def load_mock_catalogue(csv_path):
+    """Read a catalogue written by save_mock_catalogue (galaxies, clumps, tidal blobs and tidal pairs)."""
+    stem = str(Path(csv_path).with_suffix(""))
+
+    def read(suffix):
+        try:
+            return pd.read_csv(f"{stem}{suffix}.csv")
+        except (FileNotFoundError, pd.errors.EmptyDataError):  # companions are empty when a feature is switched off
+            return pd.DataFrame()
+    return MockCatalogue(read(""), read("_clumps"), read("_tidal"), read("_tidal_pairs"))
 
 
 def generate_mock_catalogues(cosmos, n_catalogues=N_CATALOGUES, out_dir=".", cfg=None, phys=None, stem=CATALOGUE_STEM):

@@ -1,0 +1,177 @@
+"""Render a mock catalogue (galaxies, star-forming clumps, tidal blobs) into a noise-free ugrizy image cube with GalSim.
+
+Bulges and discs are untruncated Sersic profiles (n = 4 / 1 when the catalogue has none) sharing the galaxy's position
+angle; clumps and tidal blobs are Gaussians. Each object is convolved with its band's Gaussian PSF and drawn on its own
+stamp, sized by GalSim so that no flux is clipped, then added to the canvas. Positions use GalSim's 1-indexed pixel
+convention: canvas pixel (x, y) is image[:, y - 1, x - 1], and frame pixel x_pix sits at canvas x = x_pix - x_min + 1.
+"""
+
+import multiprocessing as mp
+from collections import deque
+from concurrent.futures import ProcessPoolExecutor
+
+import galsim
+import numpy as np
+from tqdm import tqdm
+
+# GalSim >= 2.8 refuses very large FFTs unless this is False; big, extended galaxies must still be drawn in full.
+if hasattr(galsim.errors, "raise_fft_size_error"):
+    galsim.errors.raise_fft_size_error = False
+
+COMPONENTS = [("bulge", 4.0), ("disc", 1.0)]  # (name, default Sersic index)
+
+
+def positive_flux(record, column):
+    """The record's flux in column, or 0 if it is missing, non-finite or non-positive."""
+    flux = float(record.get(column, 0.0))
+    return flux if np.isfinite(flux) and flux > 0 else 0.0
+
+
+def draw_stamp(band_profiles, support_profiles, x, y, n_bands, pixscale, min_stamp_pix):
+    """Draw {band index: profile} on one odd-sized square stamp centred on (x, y), big enough for every profile in
+    support_profiles. Returns (xmin, ymin, cube) with cube of shape (n_bands, size, size)."""
+    size = max(int(np.ceil(max(profile.getGoodImageSize(pixscale) for profile in support_profiles))), min_stamp_pix)
+    size += 1 - size % 2
+    half = size // 2
+    ix, iy = int(np.floor(x + 0.5)), int(np.floor(y + 0.5))
+    bounds = galsim.BoundsI(ix - half, ix + half, iy - half, iy + half)
+    centre = galsim.PositionD(x, y)
+    cube = np.zeros((n_bands, size, size), dtype=np.float32)
+    for band_index, profile in band_profiles.items():
+        stamp = galsim.ImageF(bounds, scale=pixscale)
+        profile.drawImage(image=stamp, center=centre)
+        cube[band_index] = stamp.array
+    return bounds.xmin, bounds.ymin, cube
+
+
+def render_galaxy(record, psf_fwhm, bands, pixscale, min_stamp_pix):
+    """Bulge + disc stamp for one galaxy record, or None if neither component has a valid size, shape and flux."""
+    angle = float(record["pa_deg"]) * galsim.degrees
+    components = {}
+    for name, default_n in COMPONENTS:
+        re, ellipticity = float(record[f"re_{name}_arcsec"]), float(record[f"ellipticity_{name}"])
+        has_flux = any(positive_flux(record, f"flux_{band}_{name}") > 0 for band in bands)
+        if not (np.isfinite(re) and re > 0 and np.isfinite(ellipticity) and has_flux):
+            continue
+        n = float(record[f"n_{name}"]) if np.isfinite(record[f"n_{name}"]) else default_n
+        axis_ratio = float(np.clip(1.0 - ellipticity, 0.05, 1.0))
+        components[name] = galsim.Sersic(n=n, half_light_radius=re, flux=1.0).shear(q=axis_ratio, beta=angle)
+    if not components:
+        return None
+
+    # The stamp must hold every component on its own, so a faint extended disc is not cut off by a compact bulge.
+    band_profiles, support_profiles = {}, []
+    for band_index, band in enumerate(bands):
+        psf = galsim.Gaussian(fwhm=psf_fwhm[band])
+        parts = [component.withFlux(flux) for name, component in components.items()
+                 if (flux := positive_flux(record, f"flux_{band}_{name}")) > 0]
+        support_profiles += [galsim.Convolve([part, psf]) for part in parts]
+        if parts:
+            band_profiles[band_index] = galsim.Convolve([parts[0] if len(parts) == 1 else galsim.Add(parts), psf])
+    return draw_stamp(band_profiles, support_profiles, float(record["x_img"]), float(record["y_img"]), len(bands),
+                      pixscale, min_stamp_pix)
+
+
+def render_blob(record, psf_fwhm, bands, pixscale, min_stamp_pix):
+    """Gaussian stamp for one clump or tidal blob record, or None if it has no valid position, width or flux."""
+    x, y, sigma = float(record["x_img"]), float(record["y_img"]), float(record["sigma_arcsec"])
+    fluxes = [positive_flux(record, f"flux_{band}") for band in bands]
+    if not (np.isfinite(x) and np.isfinite(y) and np.isfinite(sigma) and sigma > 0 and any(fluxes)):
+        return None
+    blob = galsim.Gaussian(sigma=sigma, flux=1.0)
+    band_profiles = {i: galsim.Convolve([blob.withFlux(flux), galsim.Gaussian(fwhm=psf_fwhm[band])])
+                     for i, (band, flux) in enumerate(zip(bands, fluxes)) if flux > 0}
+    return draw_stamp(band_profiles, band_profiles.values(), x, y, len(bands), pixscale, min_stamp_pix)
+
+
+def add_stamp(image, xmin, ymin, cube):
+    """Add a stamp to the image in place, clipping it at the image edges."""
+    ny, nx = image.shape[1:]
+    x0, x1 = max(xmin, 1), min(xmin + cube.shape[2] - 1, nx)
+    y0, y1 = max(ymin, 1), min(ymin + cube.shape[1] - 1, ny)
+    if x0 <= x1 and y0 <= y1:
+        image[:, y0 - 1:y1, x0 - 1:x1] += cube[:, y0 - ymin:y1 - ymin + 1, x0 - xmin:x1 - xmin + 1]
+
+
+def render_records(render, records, shape, psf_fwhm, cfg, n_workers, label):
+    """Render every record onto a new zero image of the given shape, in parallel over n_workers processes.
+
+    Stamps are added in record order whatever order the workers finish in, so the image is reproducible exactly.
+    """
+    image = np.zeros(shape, dtype=np.float32)
+    args = (psf_fwhm, cfg["bands"], cfg["pixscale"], cfg["min_stamp_pix"])
+    with tqdm(total=len(records), desc=f"Rendering {label}") as progress:
+        def add(stamp):
+            if stamp is not None:
+                add_stamp(image, *stamp)
+            progress.update()
+
+        if n_workers <= 1:
+            for record in records:
+                add(render(record, *args))
+            return image
+        with ProcessPoolExecutor(n_workers, mp_context=mp.get_context("fork")) as pool:
+            pending = deque()
+            for record in records:
+                pending.append(pool.submit(render, record, *args))
+                if len(pending) >= 4 * n_workers:  # bounds memory: large stamps can be hundreds of MB
+                    add(pending.popleft().result())
+            while pending:
+                add(pending.popleft().result())
+    return image
+
+
+def clump_blobs(clumps, bands):
+    """Clump table in the blob form render_blob reads: x_pix, y_pix, sigma_arcsec, flux_<band>."""
+    return clumps.rename(columns={"x_pix_clump": "x_pix", "y_pix_clump": "y_pix",
+                                  **{f"flux_{band}_clump": f"flux_{band}" for band in bands}})
+
+
+def tidal_blobs(tidal, bands, pixscale):
+    """Tidal table (one row per blob and band) in blob form, one row per blob with a flux_<band> column each."""
+    tidal = tidal.assign(sigma_arcsec=tidal["sigma_pix"] * pixscale)
+    wide = tidal.pivot_table(index=["tidal_pair_id", "tidal_blob_id", "x_pix_tidal", "y_pix_tidal", "sigma_arcsec"],
+                             columns="band", values="flux_tidal", aggfunc="sum", fill_value=0.0).reset_index()
+    wide = wide.rename(columns={"x_pix_tidal": "x_pix", "y_pix_tidal": "y_pix",
+                                **{band: f"flux_{band}" for band in bands}})
+    for band in bands:
+        if f"flux_{band}" not in wide.columns:
+            wide[f"flux_{band}"] = 0.0
+    return wide
+
+
+def to_records(table, columns, required, origin):
+    """Rows as dicts of the given columns, with canvas coordinates x_img / y_img; rows missing a required value are
+    dropped."""
+    x_min, y_min = origin
+    table = table.assign(x_img=table["x_pix"] - x_min + 1, y_img=table["y_pix"] - y_min + 1)
+    return table.dropna(subset=required)[columns].to_dict("records")
+
+
+def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1):
+    """Noise-free (band, y, x) float32 image of a catalogue's galaxies, clumps and tidal blobs (nJy per pixel), with
+    each band convolved with a Gaussian PSF of FWHM psf_fwhm[band] arcsec.
+
+    The canvas spans the galaxy centres; returns (image, origin) where origin = (x_min, y_min) is the frame pixel at
+    image[:, 0, 0].
+    """
+    bands, galaxies = cfg["bands"], catalogue.galaxies
+    x_min, x_max = int(np.floor(galaxies["x_pix"].min())), int(np.ceil(galaxies["x_pix"].max()))
+    y_min, y_max = int(np.floor(galaxies["y_pix"].min())), int(np.ceil(galaxies["y_pix"].max()))
+    origin, shape = (x_min, y_min), (len(bands), y_max - y_min + 1, x_max - x_min + 1)
+
+    # Disc columns are NaN for bulge-only galaxies; render_galaxy handles that, so only these must be present.
+    galaxy_columns = ["x_img", "y_img", "pa_deg", "re_bulge_arcsec", "re_disc_arcsec", "ellipticity_bulge",
+                      "ellipticity_disc", "n_bulge", "n_disc",
+                      *[f"flux_{band}_{name}" for band in bands for name, _ in COMPONENTS]]
+    galaxy_records = to_records(galaxies, galaxy_columns, ["x_img", "y_img", "pa_deg"], origin)
+    image = render_records(render_galaxy, galaxy_records, shape, psf_fwhm, cfg, n_workers, "galaxies")
+
+    blob_columns = ["x_img", "y_img", "sigma_arcsec", *[f"flux_{band}" for band in bands]]
+    blob_tables = [("clumps", catalogue.clumps, lambda table: clump_blobs(table, bands)),
+                   ("tidal blobs", catalogue.tidal_blobs, lambda table: tidal_blobs(table, bands, cfg["pixscale"]))]
+    for label, table, to_blobs in blob_tables:
+        if len(table):
+            blob_records = to_records(to_blobs(table), blob_columns, ["x_img", "y_img", "sigma_arcsec"], origin)
+            image += render_records(render_blob, blob_records, shape, psf_fwhm, cfg, n_workers, label)
+    return image, origin

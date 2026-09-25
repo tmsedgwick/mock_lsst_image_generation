@@ -10,7 +10,7 @@ authors = [{ name = "Tom Sedgwick", email = "t.m.sedgwick@outlook.com" }]
 description = "Mock LSST-like galaxy catalogues and images for training and testing source detectors"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["numpy>=1.24", "pandas>=2.0", "scipy>=1.10"]
+dependencies = ["numpy>=1.24", "pandas>=2.0", "scipy>=1.10", "galsim>=2.5", "tqdm>=4.0"]
 
 [tool.setuptools.packages.find]
 include = ["mock_lsst_image_generation*"]

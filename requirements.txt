@@ -1,8 +1,10 @@
-# Exact versions the catalogue pipeline was verified with (Python 3.11-3.13). Pinning keeps catalogues reproducible:
+# Exact versions the pipeline was verified with (Python 3.11-3.13). Pinning keeps catalogues reproducible:
 # other numpy/scipy versions can change results at the ~1e-11 level.
 numpy==2.3.2
 pandas==2.3.3
 scipy==1.16.1
+galsim==2.8.5
+tqdm==4.70.1
 
 # Install this repo itself (editable) so `import mock_lsst_image_generation` works from anywhere.
 -e .
