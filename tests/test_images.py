@@ -30,7 +30,12 @@ def base_image(catalogue):
 
 def test_render_keeps_catalogue_flux(catalogue, base_image):
     total_r = catalogue.galaxies["flux_r_total"].sum() + catalogue.clumps["flux_r_clump"].sum()
-    assert base_image.shape == (6, 300, 301) and base_image.dtype == np.float32
+    # The canvas encloses galaxy centres, so its dimensions depend on the realisation.
+    g = catalogue.galaxies
+    nx = int(np.ceil(g["x_pix"].max()) - np.floor(g["x_pix"].min())) + 1
+    ny = int(np.ceil(g["y_pix"].max()) - np.floor(g["y_pix"].min())) + 1
+    assert base_image.shape == (len(IMAGE_CONFIG["bands"]), ny, nx)
+    assert base_image.dtype == np.float32
     assert 0.9 < base_image[2].sum() / total_r <= 1.0  # a little light falls off the frame edges
 
 

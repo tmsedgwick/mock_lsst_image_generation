@@ -7,12 +7,24 @@ Depth and seeing are independent axes of the grid, so a detector trained on it c
 them. single_coadd makes one coadd at a chosen depth and PSF instead of the whole grid.
 """
 
-from typing import Any
+from typing import TypedDict
 
 import numpy as np
 from scipy.ndimage import gaussian_filter
 
 FWHM_TO_SIGMA = 1.0 / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+
+
+class CoaddSettings(TypedDict):
+    """Settings for one coadd, with per-band mappings distinguished from scalar metadata."""
+
+    epoch: str | None
+    survey_fraction: float
+    f_r: float
+    n_visit: dict[str, int]
+    fwhm_arcsec: dict[str, float]
+    seed_entropy: list[int]
+    noise_seed: np.random.SeedSequence
 
 
 def visits_at(survey_fraction, cfg):
@@ -32,18 +44,18 @@ def jittered_band_fwhm(fwhm_r, seed, cfg):
     return fwhm
 
 
-def coadd_grid(catalogue_index, cfg) -> dict[str, dict[str, Any]]:
+def coadd_grid(catalogue_index, cfg) -> dict[str, CoaddSettings]:
     """Every (epoch, seeing) combination for one catalogue, as {key: settings}, with key e.g. '1y_fwhm110'.
 
     Each combination's jitter and noise come from its own seed, SeedSequence([catalogue_index, epoch index, seeing
     index]), so any coadd can be rebuilt on its own (e.g. on the fly during training) and is identical every time.
     """
-    grid = {}
+    grid: dict[str, CoaddSettings] = {}
     for epoch_index, (epoch, survey_fraction) in enumerate(cfg["epochs"].items()):
         for fwhm_index, fwhm_r in enumerate(cfg["fwhm_grid_r"]):
             seed_entropy = [catalogue_index, epoch_index, fwhm_index]
             jitter_seed, noise_seed = np.random.SeedSequence(seed_entropy).spawn(2)
-            grid[f"{epoch}_fwhm{int(round(fwhm_r * 100)):03d}"] = dict(
+            grid[f"{epoch}_fwhm{int(round(fwhm_r * 100)):03d}"] = CoaddSettings(
                 epoch=epoch, survey_fraction=survey_fraction, f_r=fwhm_r, n_visit=visits_at(survey_fraction, cfg),
                 fwhm_arcsec=jittered_band_fwhm(fwhm_r, jitter_seed, cfg), seed_entropy=seed_entropy,
                 noise_seed=noise_seed)
@@ -60,7 +72,7 @@ def survey_fraction(epoch):
     return int(epoch[:-1]) / (10.0 if epoch.endswith("y") else 120.0)
 
 
-def single_coadd(catalogue_index, cfg, epoch=None, n_exp=None, psf_fwhm=None):
+def single_coadd(catalogue_index, cfg, epoch=None, n_exp=None, psf_fwhm=None) -> dict[str, CoaddSettings]:
     """One coadd, in the same form as a coadd_grid entry, given either
 
       epoch             e.g. '10y': that epoch's visits, at the nominal PSF in every band; or
@@ -82,7 +94,7 @@ def single_coadd(catalogue_index, cfg, epoch=None, n_exp=None, psf_fwhm=None):
         raise ValueError(f"need at least one visit and a PSF wider than the {cfg['base_fwhm']}\" base PSF in every band")
     n_visit = visits_at(fraction, cfg)
     seed_entropy = [catalogue_index, 999, n_visit["r"], int(round(fwhm["r"] * 1000))]  # never matches a grid seed
-    return {key: dict(epoch=epoch, survey_fraction=fraction, f_r=fwhm["r"], n_visit=n_visit, fwhm_arcsec=fwhm,
+    return {key: CoaddSettings(epoch=epoch, survey_fraction=fraction, f_r=fwhm["r"], n_visit=n_visit, fwhm_arcsec=fwhm,
                       seed_entropy=seed_entropy, noise_seed=np.random.SeedSequence(seed_entropy))}
 
 
