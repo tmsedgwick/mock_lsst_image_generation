@@ -182,15 +182,17 @@ def load_mock_catalogue(csv_path):
     return MockCatalogue(read(""), read("_clumps"), read("_tidal"), read("_tidal_pairs"))
 
 
-def generate_mock_catalogues(cosmos, n_catalogues=N_CATALOGUES, out_dir=".", cfg=None, phys=None, stem=CATALOGUE_STEM):
+def generate_mock_catalogues(cosmos, n_catalogues=N_CATALOGUES, out_dir=".", cfg=None, phys=None, stem=CATALOGUE_STEM,
+                             numbered=False):
     """Build and save n independent realisations as <out_dir>/<stem>_<name>*.csv and return them by name.
 
-    Names and seeds come from config.catalogue_splits: train, valid, calib, test, then extra1, extra2, ...
+    Names and seeds come from config.catalogue_splits: train, valid, calib, test, then extra1, extra2, ...; or 1, 2,
+    3, ... if numbered.
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     catalogues = {}
-    for name, seed in catalogue_splits(n_catalogues).items():
+    for name, seed in catalogue_splits(n_catalogues, numbered).items():
         split_cfg = {**(cfg or {}), "seed": seed}
         npix = split_cfg.get("npix", CONFIG["npix"])
         out_csv = out_dir / f"{stem}_{name}.csv"

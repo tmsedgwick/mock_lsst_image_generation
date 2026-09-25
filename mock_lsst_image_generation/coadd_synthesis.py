@@ -4,7 +4,7 @@ Coadding is linear, so a coadd is the scene convolved with the visit-averaged PS
 therefore rendered once at a narrow base PSF (the expensive GalSim step), and each (depth, seeing) combination is made
 from it by broadening to the target PSF (Gaussian FWHMs add in quadrature) and adding noise for its number of visits.
 Depth and seeing are independent axes of the grid, so a detector trained on it cannot learn a spurious link between
-them. The nominal 10-year coadd is the special case of every visit at the nominal PSF.
+them. single_coadd makes one coadd at a chosen depth and PSF instead of the whole grid.
 """
 
 from typing import Any
@@ -13,7 +13,6 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 
 FWHM_TO_SIGMA = 1.0 / (2.0 * np.sqrt(2.0 * np.log(2.0)))
-TEN_YEAR_NOMINAL = "10y_nominal"
 
 
 def visits_at(survey_fraction, cfg):
@@ -51,12 +50,40 @@ def coadd_grid(catalogue_index, cfg) -> dict[str, dict[str, Any]]:
     return grid
 
 
-def ten_year_nominal(catalogue_index, cfg) -> dict[str, dict[str, Any]]:
-    """The full-depth coadd at the nominal PSF in every band, in the same form as a coadd_grid entry."""
-    seed_entropy = [catalogue_index, 999, 999]  # outside the grid's (epoch, seeing) indices, so never shared with it
-    return {TEN_YEAR_NOMINAL: dict(epoch="10y", survey_fraction=1.0, f_r=cfg["nominal_fwhm"]["r"],
-                                   n_visit=visits_at(1.0, cfg), fwhm_arcsec=dict(cfg["nominal_fwhm"]),
-                                   seed_entropy=seed_entropy, noise_seed=np.random.SeedSequence(seed_entropy))}
+EPOCH_CHOICES = [f"{n}m" for n in range(1, 12)] + [f"{n}y" for n in range(1, 11)]
+
+
+def survey_fraction(epoch):
+    """Fraction of the 10-year survey for an epoch in EPOCH_CHOICES: '10y' -> 1.0, '1y' -> 0.1, '6m' -> 0.05."""
+    if epoch not in EPOCH_CHOICES:
+        raise ValueError(f"Unknown epoch {epoch!r}; choose from {', '.join(EPOCH_CHOICES)}")
+    return int(epoch[:-1]) / (10.0 if epoch.endswith("y") else 120.0)
+
+
+def single_coadd(catalogue_index, cfg, epoch=None, n_exp=None, psf_fwhm=None):
+    """One coadd, in the same form as a coadd_grid entry, given either
+
+      epoch             e.g. '10y': that epoch's visits, at the nominal PSF in every band; or
+      n_exp, psf_fwhm   r-band visits and r-band PSF FWHM (arcsec); the other bands scale by the 10-year visit ratios
+                        and the nominal PSF ratios.
+
+    The noise seed depends only on the catalogue and the coadd's visits and PSF, so the same request gives the same
+    image every time.
+    """
+    nominal = cfg["nominal_fwhm"]
+    if epoch is not None and n_exp is None and psf_fwhm is None:
+        key, fraction, fwhm = f"{epoch}_nominal", survey_fraction(epoch), dict(nominal)
+    elif epoch is None and n_exp is not None and psf_fwhm is not None:
+        key, fraction = f"nexp{int(n_exp)}_fwhm{int(round(psf_fwhm * 100)):03d}", n_exp / cfg["visits_10yr"]["r"]
+        fwhm = {band: psf_fwhm * nominal[band] / nominal["r"] for band in cfg["bands"]}
+    else:
+        raise ValueError("give either epoch alone, or both n_exp and psf_fwhm")
+    if fraction <= 0 or min(fwhm.values()) <= cfg["base_fwhm"]:
+        raise ValueError(f"need at least one visit and a PSF wider than the {cfg['base_fwhm']}\" base PSF in every band")
+    n_visit = visits_at(fraction, cfg)
+    seed_entropy = [catalogue_index, 999, n_visit["r"], int(round(fwhm["r"] * 1000))]  # never matches a grid seed
+    return {key: dict(epoch=epoch, survey_fraction=fraction, f_r=fwhm["r"], n_visit=n_visit, fwhm_arcsec=fwhm,
+                      seed_entropy=seed_entropy, noise_seed=np.random.SeedSequence(seed_entropy))}
 
 
 def broaden(image, target_fwhm, cfg):
@@ -96,7 +123,7 @@ def add_noise(image, n_visit, seed, cfg):
 
 
 def synthesise_coadd(base_image, coadd, cfg):
-    """(signal, variance) float32 cubes for one coadd_grid / ten_year_nominal entry, from the base-PSF render."""
+    """(signal, variance) float32 cubes for one coadd_grid / single_coadd entry, from the base-PSF render."""
     signal, variance = add_noise(broaden(base_image, coadd["fwhm_arcsec"], cfg), coadd["n_visit"], coadd["noise_seed"],
                                  cfg)
     return signal.astype(np.float32, copy=False), variance.astype(np.float32, copy=False)

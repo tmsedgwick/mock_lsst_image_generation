@@ -63,6 +63,9 @@ number; catalogues beyond the fourth are named `extra1`, `extra2`, and so on. Ea
 realisation of a 5000 × 5000 pixel frame (0.2″ pixels), and only the seed differs. Catalogue k always gets the same
 name and seed, so asking for more never changes the ones you already have.
 
+If you are not training a model, `--numbered` names them `1`, `2`, `3`, ... instead (same seeds, so `1` is the same
+realisation as `train`).
+
 Each catalogue writes four CSVs to `catalogues/` (change with `--out-dir`):
 
 | File | Contents |
@@ -81,18 +84,23 @@ coordinates.
 python scripts/generate_mock_images.py                         # every catalogue, the coadds needed for training
 python scripts/generate_mock_images.py --catalogue train test  # only these catalogues
 python scripts/generate_mock_images.py --all-images            # save every coadd of every catalogue
-python scripts/generate_mock_images.py --ten-year-only         # just the nominal 10-year coadd of each
+python scripts/generate_mock_images.py --epoch 10y             # one coadd per catalogue: 10 years, nominal PSF
+python scripts/generate_mock_images.py --n-exp 50 --psf-fwhm 1.3   # one coadd: 50 r-band visits, r FWHM 1.3"
 ```
+
+For a single coadd, give either `--epoch` (`1m` to `11m` or `1y` to `10y`, at the nominal PSF in every band) or both
+`--n-exp` and `--psf-fwhm` (r-band visits and FWHM in arcsec; the other bands scale with LSST's 10-year visit plan and
+the nominal PSF ratios).
 
 Each catalogue is rendered once with GalSim (bulge + disc Sersic profiles, Gaussian clumps and tidal blobs) at a
 narrow 0.45″ PSF. Coadds are then made from that render for a grid of 7 survey depths (1 month, 6 months, 1, 3, 5, 8
 and 10 years of visits) × 6 seeings (r-band PSF FWHM 0.7″ to 2.0″), by broadening it to the target PSF and adding sky
 and source noise for that many visits. Depth and seeing vary independently, so a detector cannot learn to link them.
 
-By default every coadd is listed in each catalogue's manifest, but only the `calib` and `test` coadds are saved. The
-training code rebuilds `train`/`valid` coadds on the fly from the saved base render and manifest, identically every
-time, so they take no disk space. At the full 5000 × 5000 pixel size each saved coadd (signal + variance) is 1.2 GB,
-so the default run needs about 100 GB, `--all-images` about 200 GB and `--ten-year-only` about 7 GB.
+By default every coadd is listed in each catalogue's manifest and saved, except for `train` and `valid`: the training
+code rebuilds those on the fly from the saved base render and manifest, identically every time, so they take no disk
+space. At the full 5000 × 5000 pixel size each saved coadd (signal + variance) is 1.2 GB, so for the four standard
+catalogues the default run needs about 100 GB, `--all-images` about 200 GB and a single coadd about 7 GB. Saving this partial dataset with a small psf allows for the data to be degraded on the fly. These degraded images can then removed from memory after they have been processed.
 
 Rendering is the slow step; it runs in parallel over `--n-workers` processes (default: up to 8). Outputs go to
 `images/<catalogue>/` (change with `--out-dir`; read catalogues from elsewhere with `--catalogue-dir`):
@@ -102,7 +110,7 @@ Rendering is the slow step; it runs in parallel over `--n-workers` processes (de
 | `base_clean_signal.npy` | Noise-free render at the 0.45″ base PSF, float32 (band, y, x) in nJy per pixel |
 | `base_meta.json` | Bands, canvas origin in frame pixels, shape, pixel scale, zeropoint, base PSF |
 | `coadd_manifest.json` | Every coadd: visits and PSF FWHM per band, noise seed, and whether it was saved |
-| `<catalogue>_<coadd>_signal.npy` | A saved coadd, e.g. `test_1y_fwhm110_signal.npy` (nJy per pixel) |
+| `<catalogue>_<coadd>_signal.npy` | A saved coadd (nJy per pixel), e.g. `test_1y_fwhm110_signal.npy`, `test_10y_nominal_signal.npy` or `test_nexp50_fwhm130_signal.npy` |
 | `<catalogue>_<coadd>_variance.npy` | Its per-pixel variance |
 
 Bands are in `ugrizy` order. A catalogue position (`x_pix`, `y_pix`) falls in array pixel
@@ -119,7 +127,7 @@ cat.galaxies, cat.clumps, cat.tidal_blobs, cat.tidal_pairs
 save_mock_catalogue(cat, "my_mock.csv")
 
 from mock_lsst_image_generation import generate_catalogue_images
-generate_catalogue_images(cat, "test", "my_images", mode="ten_year", n_workers=8)  # or "training" / "all"
+generate_catalogue_images(cat, "test", "my_images", mode="single", epoch="10y", n_workers=8)  # or "training" / "all"
 ```
 
 ## Tests
@@ -132,7 +140,7 @@ pytest -q
 The tests (about a minute) build small catalogues from the shipped subset and check they are sane, reproducible, and
 unchanged from the reference realisation pinned in `tests/test_catalogue.py`. `tests/test_images.py` renders a small
 catalogue and checks the image keeps the catalogue's flux, the coadd noise matches its variance, and each image mode
-writes the right files. GitHub Actions runs them on every push
+and single-coadd option writes the right files. GitHub Actions runs them on every push
 (`.github/workflows/tests.yml`). If you change the model on purpose, the reference test will fail: check the new
 catalogue, then update `REFERENCE`.
 

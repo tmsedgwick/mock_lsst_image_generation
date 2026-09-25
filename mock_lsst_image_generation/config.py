@@ -110,26 +110,34 @@ IMAGE_CONFIG: dict[str, Any] = dict(
     epochs={"1m": 1.0 / 120.0, "6m": 0.05, "1y": 0.10, "3y": 0.30, "5y": 0.50, "8y": 0.80, "10y": 1.00},
     # Seeing axis: r-band coadd PSF FWHM (arcsec); other bands follow the nominal ratios with a small random jitter.
     fwhm_grid_r=[0.7, 0.9, 1.1, 1.3, 1.5, 2.0], fwhm_ratio_jitter=0.03,
-    # Catalogues whose coadds are saved by default. Training code rebuilds the others on the fly from the base image.
-    saved_catalogues=["calib", "test"],
+    # Catalogues whose coadds are not saved by default: training code rebuilds them on the fly from the base image.
+    on_the_fly_catalogues=["train", "valid"],
     min_stamp_pix=25,  # smallest GalSim stamp; there is deliberately no maximum, so no flux is clipped
 )
 
 
 def catalogue_index(name):
-    """Position of a catalogue in the train, valid, calib, test, extra1, extra2, ... sequence."""
+    """Position of a catalogue in the train, valid, calib, test, extra1, extra2, ... sequence; numbered names 1, 2, 3, ...
+    count along the same sequence, so catalogue 1 is the same realisation as train."""
+    if name.isdigit() and int(name) >= 1:
+        return int(name) - 1
     if name in CATALOGUE_NAMES:
         return CATALOGUE_NAMES.index(name)
     if name.startswith("extra") and name[5:].isdigit() and int(name[5:]) >= 1:
         return len(CATALOGUE_NAMES) + int(name[5:]) - 1
-    raise ValueError(f"Unknown catalogue name {name!r}: expected one of {CATALOGUE_NAMES} or extra1, extra2, ...")
+    raise ValueError(f"Unknown catalogue name {name!r}: expected {', '.join(CATALOGUE_NAMES)}, extra1, extra2, ... "
+                     "or 1, 2, 3, ...")
 
 
-def catalogue_splits(n_catalogues=N_CATALOGUES):
+def catalogue_splits(n_catalogues=N_CATALOGUES, numbered=False):
     """{name: seed} for n realisations: train, valid, calib, test (seeds 42, 101, 202, 303), then extra1, extra2, ...
-    (seeds 404, 505, ...). Realisation k always has the same name and seed, so adding more never changes the rest."""
+    (seeds 404, 505, ...); or, if numbered, 1, 2, 3, ... with the same seeds. Realisation k always has the same name
+    and seed, so adding more never changes the rest."""
     if n_catalogues < 1:
         raise ValueError(f"n_catalogues must be at least 1, got {n_catalogues}")
-    names = CATALOGUE_NAMES[:n_catalogues]
-    names += [f"extra{k}" for k in range(1, n_catalogues - len(names) + 1)]
+    if numbered:
+        names = [str(k) for k in range(1, n_catalogues + 1)]
+    else:
+        names = CATALOGUE_NAMES[:n_catalogues]
+        names += [f"extra{k}" for k in range(1, n_catalogues - len(names) + 1)]
     return {name: 42 if k == 0 else 101 * k for k, name in enumerate(names)}

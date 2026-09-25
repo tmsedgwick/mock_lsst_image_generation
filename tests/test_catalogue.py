@@ -46,6 +46,7 @@ def test_shipped_cosmos_subset_loads(cosmos):
 def test_catalogue_splits_are_stable():
     assert catalogue_splits(4) == dict(train=42, valid=101, calib=202, test=303)
     assert catalogue_splits(6) == {**catalogue_splits(4), "extra1": 404, "extra2": 505}
+    assert catalogue_splits(3, numbered=True) == {"1": 42, "2": 101, "3": 202}
     with pytest.raises(ValueError):
         catalogue_splits(0)
 

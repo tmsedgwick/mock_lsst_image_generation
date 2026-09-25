@@ -8,10 +8,11 @@ For catalogue <name>, <out_dir>/<name>/ holds:
   <name>_<coadd>_variance.npy     ... and their per-pixel variance
 
 Modes:
-  training   (default) every (epoch, seeing) coadd goes in the manifest, but only calib/test coadds are saved. Training
-             code rebuilds the train/valid ones on the fly from the base render and manifest, so they cost no disk.
+  training   (default) every (epoch, seeing) coadd goes in the manifest; all are saved except for train/valid, whose
+             coadds training code rebuilds on the fly from the base render and manifest, so they cost no disk.
   all        every coadd is saved for every catalogue.
-  ten_year   only the nominal 10-year coadd, saved for every catalogue.
+  single     one coadd, saved for every catalogue: pass epoch (e.g. '10y', at the nominal PSF), or n_exp and psf_fwhm
+             (r-band visits and PSF FWHM); see coadd_synthesis.single_coadd.
 """
 
 import gc
@@ -21,15 +22,15 @@ from pathlib import Path
 import numpy as np
 
 from .catalogue_pipeline import load_mock_catalogue
-from .coadd_synthesis import coadd_grid, synthesise_coadd, ten_year_nominal
+from .coadd_synthesis import coadd_grid, single_coadd, synthesise_coadd
 from .config import CATALOGUE_STEM, IMAGE_CONFIG, catalogue_index
 from .galaxy_rendering import render_catalogue
 
-MODES = ("training", "all", "ten_year")
+MODES = ("training", "all", "single")
 
 
 def available_catalogues(catalogue_dir, stem=CATALOGUE_STEM):
-    """Names of the catalogues saved in catalogue_dir, in train, valid, calib, test, extra1, ... order."""
+    """Names of the catalogues saved in catalogue_dir, in train, valid, calib, test, extra1, ... (or 1, 2, ...) order."""
     names = []
     for path in Path(catalogue_dir).glob(f"{stem}_*.csv"):
         name = path.stem[len(stem) + 1:]
@@ -45,11 +46,15 @@ def write_json(path, content):
         json.dump(content, file, indent=2)
 
 
-def generate_catalogue_images(catalogue, name, out_dir, mode="training", cfg=None, n_workers=1):
+def generate_catalogue_images(catalogue, name, out_dir, mode="training", cfg=None, n_workers=1, epoch=None, n_exp=None,
+                              psf_fwhm=None):
     """Render one catalogue and write its base image, manifest and coadds (see the module docstring)."""
     if mode not in MODES:
         raise ValueError(f"mode must be one of {MODES}, got {mode!r}")
     cfg = {**IMAGE_CONFIG, **(cfg or {})}
+    index = catalogue_index(name)
+    # Build the coadd list first, so a bad epoch / n_exp / psf_fwhm fails before the slow render.
+    coadds = single_coadd(index, cfg, epoch, n_exp, psf_fwhm) if mode == "single" else coadd_grid(index, cfg)
     for band in cfg["bands"]:
         if min(cfg["fwhm_grid_r"]) * cfg["nominal_fwhm"][band] / cfg["nominal_fwhm"]["r"] <= cfg["base_fwhm"]:
             raise ValueError(f"base_fwhm {cfg['base_fwhm']} must be narrower than every target PSF ({band} band)")
@@ -63,9 +68,7 @@ def generate_catalogue_images(catalogue, name, out_dir, mode="training", cfg=Non
                                                 base_fwhm=cfg["base_fwhm"], shape=list(base_image.shape),
                                                 ps=cfg["pixscale"], zp=cfg["zeropoint"]))
 
-    index = catalogue_index(name)
-    coadds = ten_year_nominal(index, cfg) if mode == "ten_year" else coadd_grid(index, cfg)
-    save = mode != "training" or name in cfg["saved_catalogues"]
+    save = mode != "training" or name not in cfg["on_the_fly_catalogues"]
     manifest_coadds = {}
     for key, coadd in coadds.items():
         if save:
@@ -81,8 +84,8 @@ def generate_catalogue_images(catalogue, name, out_dir, mode="training", cfg=Non
     print(f"[{name}] {len(coadds)} coadds in the manifest, {len(coadds) if save else 0} saved -> {out_dir}")
 
 
-def generate_mock_images(catalogue_dir, out_dir, names=None, mode="training", cfg=None, n_workers=1,
-                         stem=CATALOGUE_STEM):
+def generate_mock_images(catalogue_dir, out_dir, names=None, mode="training", cfg=None, n_workers=1, epoch=None,
+                         n_exp=None, psf_fwhm=None, stem=CATALOGUE_STEM):
     """Generate images for the named catalogues in catalogue_dir (default: every catalogue there)."""
     available = available_catalogues(catalogue_dir, stem)
     if not available:
@@ -92,4 +95,4 @@ def generate_mock_images(catalogue_dir, out_dir, names=None, mode="training", cf
         raise FileNotFoundError(f"Catalogues {missing} not found in {catalogue_dir}; available: {available}")
     for name in names or available:
         catalogue = load_mock_catalogue(Path(catalogue_dir) / f"{stem}_{name}.csv")
-        generate_catalogue_images(catalogue, name, out_dir, mode, cfg, n_workers)
+        generate_catalogue_images(catalogue, name, out_dir, mode, cfg, n_workers, epoch, n_exp, psf_fwhm)
