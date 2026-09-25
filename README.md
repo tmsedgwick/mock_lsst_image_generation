@@ -4,11 +4,12 @@ Mock LSST-like galaxy catalogues and images for training and testing source dete
 physical models and COSMOS2025 data. Every galaxy is a known truth entry, so any detector's completeness and purity can
 be measured exactly.
 
-Two commands: one builds the catalogues, the other renders them into images.
+Two commands: one builds the catalogues, the other renders them into images. Both require their output folder; keep
+it outside the repo, since a full image set can be ~200 GB.
 
 ```bash
-python scripts/generate_mock_catalogues.py   # -> catalogues/
-python scripts/generate_mock_images.py       # -> images/
+python scripts/generate_mock_catalogues.py --out-dir ~/mocks/catalogues
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images
 ```
 
 ## What the catalogue models
@@ -55,7 +56,7 @@ pass the full catalogue instead.
 ## Generate catalogues
 
 ```bash
-python scripts/generate_mock_catalogues.py   # add --cosmos /path/to/cosmos2025_cat.npz for the full table
+python scripts/generate_mock_catalogues.py --out-dir ~/mocks/catalogues   # add --cosmos /path/to/cosmos2025_cat.npz for the full table
 ```
 
 This builds four catalogues by default: `train`, `valid`, `calib` and `test`. Pass `--n-catalogues N` to build any
@@ -66,7 +67,7 @@ name and seed, so asking for more never changes the ones you already have.
 If you are not training a model, `--numbered` names them `1`, `2`, `3`, ... instead (same seeds, so `1` is the same
 realisation as `train`).
 
-Each catalogue writes four CSVs to `catalogues/` (change with `--out-dir`):
+Each catalogue writes four CSVs to `--out-dir`:
 
 | File | Contents |
 |---|---|
@@ -81,11 +82,20 @@ coordinates.
 ## Generate images
 
 ```bash
-python scripts/generate_mock_images.py                         # every catalogue, the coadds needed for training
-python scripts/generate_mock_images.py --catalogue train test  # only these catalogues
-python scripts/generate_mock_images.py --all-images            # save every coadd of every catalogue
-python scripts/generate_mock_images.py --epoch 10y             # one coadd per catalogue: 10 years, nominal PSF
-python scripts/generate_mock_images.py --n-exp 50 --psf-fwhm 1.3   # one coadd: 50 r-band visits, r FWHM 1.3"
+# every catalogue, the coadds needed for training
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images
+
+# only these catalogues
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --catalogue train test
+
+# save every coadd of every catalogue
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --all-images
+
+# one coadd per catalogue: 10 years, nominal PSF
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --epoch 10y
+
+# alternative to epoch flag. this example generates one coadd with 50 r-band visits, r FWHM 1.3". Other bands scaled proportionally to 10 yr Nexp ratios and expected FWHMs.
+python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --n-exp 50 --psf-fwhm 1.3
 ```
 
 For a single coadd, give either `--epoch` (`1m` to `11m` or `1y` to `10y`, at the nominal PSF in every band) or both
@@ -103,7 +113,7 @@ space. At the full 5000 × 5000 pixel size each saved coadd (signal + variance) 
 catalogues the default run needs about 100 GB, `--all-images` about 200 GB and a single coadd about 7 GB. Saving this partial dataset with a small psf allows for the data to be degraded on the fly. These degraded images can then removed from memory after they have been processed.
 
 Rendering is the slow step; it runs in parallel over `--n-workers` processes (default: up to 8). Outputs go to
-`images/<catalogue>/` (change with `--out-dir`; read catalogues from elsewhere with `--catalogue-dir`):
+`<out-dir>/<catalogue>/`:
 
 | File | Contents |
 |---|---|

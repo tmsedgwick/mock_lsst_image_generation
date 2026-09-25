@@ -5,8 +5,8 @@ named train, valid, calib and test, any further ones extra1, extra2, ... (or, wi
 ... for use outside model training), and each is written as
 <out-dir>/mock_catalogue_<name>{,_clumps,_tidal,_tidal_pairs}.csv
 
-    python scripts/generate_mock_catalogues.py --n-catalogues 6
-    python scripts/generate_mock_catalogues.py --n-catalogues 2 --numbered   # mock_catalogue_1, mock_catalogue_2
+    python scripts/generate_mock_catalogues.py --out-dir ~/mocks/catalogues
+    python scripts/generate_mock_catalogues.py --out-dir ~/mocks/catalogues --n-catalogues 2 --numbered
 
 COSMOS2025 is read from the subset shipped in data/ unless --cosmos is given.
 """
@@ -22,8 +22,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--cosmos", type=Path, default=DEFAULT_COSMOS_PATH,
                         help="COSMOS2025 catalogue (.npz) (default: %(default)s)")
-    parser.add_argument("--out-dir", type=Path, default=Path("catalogues"),
-                        help="output directory (default: %(default)s)")
+    parser.add_argument("--out-dir", type=Path, required=True,
+                        help="output directory; keep it outside the repo, catalogues are large")
     parser.add_argument("--n-catalogues", type=int, default=N_CATALOGUES,
                         help="number of catalogues to generate (default: %(default)s)")
     parser.add_argument("--npix", type=int, default=CONFIG["npix"], help="frame side in pixels (default: %(default)s)")

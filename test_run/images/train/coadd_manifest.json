@@ -1,0 +1,41 @@
+{
+  "split": "train",
+  "base_fwhm": 0.45,
+  "bands": [
+    "u",
+    "g",
+    "r",
+    "i",
+    "z",
+    "y"
+  ],
+  "materialised": true,
+  "combos": {
+    "10y_nominal": {
+      "epoch": "10y",
+      "survey_fraction": 1.0,
+      "f_r": 1.05,
+      "n_visit": {
+        "u": 56,
+        "g": 80,
+        "r": 184,
+        "i": 185,
+        "z": 160,
+        "y": 160
+      },
+      "fwhm_arcsec": {
+        "u": 1.16,
+        "g": 1.11,
+        "r": 1.05,
+        "i": 1.01,
+        "z": 0.97,
+        "y": 0.95
+      },
+      "seed_entropy": [
+        0,
+        999,
+        999
+      ]
+    }
+  }
+}

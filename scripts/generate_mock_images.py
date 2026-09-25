@@ -5,13 +5,19 @@ FWHM 0.7" to 2.0") are then made from that render. By default every catalogue in
 coadds are listed in each manifest, and all are saved except train/valid's: training code rebuilds those on the fly
 from the saved base render, so they take no disk space.
 
-    python scripts/generate_mock_images.py                         # all catalogues, coadds needed for training
-    python scripts/generate_mock_images.py --catalogue train test  # only these catalogues
-    python scripts/generate_mock_images.py --all-images            # save every coadd of every catalogue
-    python scripts/generate_mock_images.py --epoch 10y             # one coadd: 10 years of visits, nominal PSF
-    python scripts/generate_mock_images.py --n-exp 50 --psf-fwhm 1.3   # one coadd: 50 r-band visits, r FWHM 1.3"
+    # all catalogues, coadds needed for training
+    python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images
+    # only these catalogues
+    python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --catalogue train test
+    # save every coadd of every catalogue
+    python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --all-images
+    # one coadd: 10 years of visits, nominal PSF
+    python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --epoch 10y
+    # one coadd: 50 r-band visits, r FWHM 1.3"
+    python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-dir ~/mocks/images --n-exp 50 --psf-fwhm 1.3
 
-Outputs go to <out-dir>/<catalogue>/ (see mock_lsst_image_generation/image_pipeline.py for the file list).
+Keep both folders outside the repo. Outputs go to <out-dir>/<catalogue>/; see
+mock_lsst_image_generation/image_pipeline.py for the file list.
 """
 
 import argparse
@@ -24,9 +30,10 @@ from mock_lsst_image_generation.coadd_synthesis import EPOCH_CHOICES
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--catalogue-dir", type=Path, default=Path("catalogues"),
-                        help="where generate_mock_catalogues.py wrote the catalogues (default: %(default)s)")
-    parser.add_argument("--out-dir", type=Path, default=Path("images"), help="output directory (default: %(default)s)")
+    parser.add_argument("--catalogue-dir", type=Path, required=True,
+                        help="where generate_mock_catalogues.py wrote the catalogues")
+    parser.add_argument("--out-dir", type=Path, required=True,
+                        help="output directory; keep it outside the repo, images are large (up to ~200 GB)")
     parser.add_argument("--catalogue", nargs="+", metavar="NAME",
                         help="only these catalogues, e.g. train or 1 (default: all in --catalogue-dir)")
     parser.add_argument("--all-images", action="store_true", help="save every coadd of every catalogue")
