@@ -14,6 +14,8 @@ import galsim
 import numpy as np
 from tqdm import tqdm
 
+from .stars import render_stars
+
 # GalSim >= 2.8 refuses very large FFTs unless this is False; big, extended galaxies must still be drawn in full.
 if hasattr(galsim.errors, "raise_fft_size_error"):
     galsim.errors.raise_fft_size_error = False
@@ -148,14 +150,20 @@ def to_records(table, columns, required, origin):
     return table.dropna(subset=required)[columns].to_dict("records")
 
 
-def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1):
-    """Noise-free (band, y, x) float32 image of a catalogue's galaxies, clumps and tidal blobs (nJy per pixel), with
-    each band convolved with a Gaussian PSF of FWHM psf_fwhm[band] arcsec.
+def split_stars(table):
+    """(galaxy rows, star rows) of a catalogue table."""
+    is_star = (table["type"] == "star").to_numpy() if "type" in table else np.zeros(len(table), bool)
+    return table[~is_star], table[is_star]
+
+
+def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1, star_seed=0):
+    """Noise-free (band, y, x) float32 image of a catalogue's galaxies, clumps, tidal blobs and stars (nJy per pixel),
+    with each band convolved with a Gaussian PSF of FWHM psf_fwhm[band] arcsec.
 
     The canvas spans the galaxy centres; returns (image, origin) where origin = (x_min, y_min) is the frame pixel at
-    image[:, 0, 0].
+    image[:, 0, 0]. star_seed seeds the stars' random details (spike angles, arm brightness, halo streaks).
     """
-    bands, galaxies = cfg["bands"], catalogue.galaxies
+    bands, (galaxies, stars) = cfg["bands"], split_stars(catalogue.galaxies)
     x_min, x_max = int(np.floor(galaxies["x_pix"].min())), int(np.ceil(galaxies["x_pix"].max()))
     y_min, y_max = int(np.floor(galaxies["y_pix"].min())), int(np.ceil(galaxies["y_pix"].max()))
     origin, shape = (x_min, y_min), (len(bands), y_max - y_min + 1, x_max - x_min + 1)
@@ -174,4 +182,6 @@ def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1):
         if len(table):
             blob_records = to_records(to_blobs(table), blob_columns, ["x_img", "y_img", "sigma_arcsec"], origin)
             image += render_records(render_blob, blob_records, shape, psf_fwhm, cfg, n_workers, label)
+    if len(stars):
+        image += render_stars(stars, shape, origin, psf_fwhm, cfg, np.random.default_rng([star_seed, 2]))
     return image, origin

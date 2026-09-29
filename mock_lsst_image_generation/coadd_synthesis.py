@@ -12,6 +12,8 @@ from typing import TypedDict
 import numpy as np
 from scipy.ndimage import gaussian_filter
 
+from .stars import saturate_stars
+
 FWHM_TO_SIGMA = 1.0 / (2.0 * np.sqrt(2.0 * np.log(2.0)))
 
 
@@ -134,8 +136,14 @@ def add_noise(image, n_visit, seed, cfg):
     return signal, variance
 
 
-def synthesise_coadd(base_image, coadd, cfg):
-    """(signal, variance) float32 cubes for one coadd_grid / single_coadd entry, from the base-PSF render."""
-    signal, variance = add_noise(broaden(base_image, coadd["fwhm_arcsec"], cfg), coadd["n_visit"], coadd["noise_seed"],
-                                 cfg)
+def synthesise_coadd(base_image, coadd, cfg, stars=None, origin=(0, 0)):
+    """(signal, variance) float32 cubes for one coadd_grid / single_coadd entry, from the base-PSF render.
+
+    Stars (catalogue rows in frame pixels; origin is the frame pixel at base_image[:, 0, 0]) get saturated cores after
+    the noise, as in real coadds."""
+    clean = broaden(base_image, coadd["fwhm_arcsec"], cfg)
+    signal, variance = add_noise(clean, coadd["n_visit"], coadd["noise_seed"], cfg)
+    if stars is not None and len(stars):
+        signal = saturate_stars(signal, clean, stars, origin, cfg["bands"],
+                                np.random.default_rng(list(coadd["seed_entropy"]) + [3]))
     return signal.astype(np.float32, copy=False), variance.astype(np.float32, copy=False)

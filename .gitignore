@@ -15,3 +15,4 @@ dist/
 # Shipped COSMOS2025 subset (17 MB)
 !data/cosmos2025_subset.npz
 .pytest_cache/
+!data/star_colours.csv

@@ -19,7 +19,7 @@ N_COADDS = len(IMAGE_CONFIG["epochs"]) * len(IMAGE_CONFIG["fwhm_grid_r"])
 @pytest.fixture(scope="module")
 def catalogue():
     with contextlib.redirect_stdout(io.StringIO()):
-        return build_mock_catalogue(load_cosmos2025_catalogue(), dict(seed=42, npix=300))
+        return build_mock_catalogue(load_cosmos2025_catalogue(), dict(seed=42, npix=300, stars=False))
 
 
 @pytest.fixture(scope="module")

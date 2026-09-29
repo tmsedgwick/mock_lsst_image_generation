@@ -20,6 +20,8 @@ python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-
   galaxy's redshift, giving LSST ugrizy photometry
 - **Structure:** bulge + disc
 - **Extras:** star-forming clumps and tidal bridges between interacting pairs
+- **Stars:** bright LSST-like stars with band-dependent diffraction spikes, halos and saturated cores, calibrated on
+  a real LSSTCam deep coadd (`stars.py`, settings in `STAR_CONFIG`)
 
 `catalogue_pipeline.build_mock_catalogue` ties these together. All settings live in `config.py` (`CONFIG`, `PHYS`,
 and `IMAGE_CONFIG` for the images); pass a partial dict to override any of them.
@@ -71,13 +73,18 @@ Each catalogue writes four CSVs to `--out-dir`:
 
 | File | Contents |
 |---|---|
-| `mock_catalogue_<name>.csv` | Galaxies: position, redshift, environment, physical properties, and bulge/disc/total photometry and structure |
+| `mock_catalogue_<name>.csv` | Galaxies: position, redshift, environment, physical properties, and bulge/disc/total photometry and structure. Stars are extra rows with `type` = `star` |
 | `…_clumps.csv` | Star-forming clumps: parent id, offsets, width, per-band flux |
 | `…_tidal.csv` | Tidal-bridge blobs: one row per blob and band |
 | `…_tidal_pairs.csv` | The interacting pairs |
 
 Fluxes are in nJy (AB zeropoint 31.4). Sizes are half-light radii in arcsec. `x_pix` and `y_pix` are frame pixel
 coordinates.
+
+Star rows have positions, `mag_<band>_total` / `flux_<band>_total` for ugrizy, and the parameters that shape their
+spikes, halo and saturation (galaxy-only columns are empty for them). Stars have their own random stream, so the
+galaxies are identical with or without them; pass `dict(stars=False)` to `build_mock_catalogue` to leave them out.
+Their spike angles (shared by every star in an image) and saturated cores are drawn when the images are made.
 
 ## Generate images
 

@@ -25,6 +25,7 @@ from .gsmf_sampling import build_gsmf_sampling_tables, draw_gsmf_masses
 from .rest_frame_sed_sampling import (RestFrameEmpiricalPDF, build_rest_frame_donor_table, project_to_observed_frame,
                                       sample_rest_frame_properties)
 from .sf_clump_generation import add_sf_clumps
+from .stars import add_stars
 from .ssfr_sampling import build_low_redshift_ssfr_pdf, draw_log_ssfr
 from .tidal_stream_generation import add_tidal_streams, select_tidal_pairs
 from .utils import combined_mask, print_cut_summary
@@ -156,6 +157,8 @@ def build_mock_catalogue(cosmos, cfg=None, phys=None):
         mock, tidal_blobs = add_tidal_streams(mock, tidal_pairs, cfg, rng)
     print("Projection edge distance percentiles:")
     print(np.nanpercentile(mock["projection_edge_distance"], [1, 16, 50, 84, 99]))
+    if cfg["stars"]:  # own random stream, so the galaxies are identical with or without stars
+        mock = add_stars(mock, cfg, np.random.default_rng([cfg["seed"], 1]))
     return MockCatalogue(mock, clumps, tidal_blobs, tidal_pairs, pdf, donors)
 
 

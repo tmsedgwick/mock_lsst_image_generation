@@ -82,6 +82,33 @@ CONFIG: dict[str, Any] = dict(
     # Clumps and tidal features only go on resolved galaxies: resolved_re_col > PSF FWHM in resolved_psf_band.
     psf_fwhm_arcsec=dict(u=1.16, g=1.11, r=1.05, i=1.01, z=0.97, y=0.95), resolved_psf_band="r",
     resolved_re_col="re_total_arcsec",
+    # Bright stars (see stars.py and STAR_CONFIG): added to the catalogue as rows with type "star".
+    stars=True,
+)
+
+# Stars, calibrated on the stars of a real LSSTCam deep coadd (StarSimulation.ipynb). Only g, r and i were calibrated:
+# u uses g's light-profile template, z and y use i's.
+STAR_CONFIG: dict[str, Any] = dict(
+    density_per_deg2=5600, mag_range=(9.0, 23.0), count_slope=0.185,  # field stars to r = 23; dlog N / dm
+    bright_per_deg2=100, bright_mag_range=(10.0, 15.0),  # extra bright stars, so training sees spikes and saturation
+    colour_match_mag=1.0,  # colours are resampled from field stars within ~this many mag
+    red_g_r=1.1, red_drop_per_mag=0.3,  # red (M-dwarf) colours fade out brighter than the field's brightest stars
+    # Light profile as fractions of total flux: seeing core, Moffat halo (beta, FWHM") with a soft outer edge and
+    # radial streaks, and diffraction spikes (on-axis brightness per pixel at 10", summed over an image's lines).
+    halo_basis=[(2.5, 5.0), (2.0, 12.0)],
+    halo_fraction=dict(u=[0.0293, 0.0072], g=[0.0293, 0.0072], r=[0.0414, 0.0049], i=[0.0426, 0.0046],
+                       z=[0.0426, 0.0046], y=[0.0426, 0.0046]),
+    spike_at_10arcsec=dict(u=6.5e-7, g=6.5e-7, r=1.33e-6, i=7.4e-7, z=7.4e-7, y=7.4e-7),
+    spike_rotations=(1, 3),  # camera rotations per band in one image; each gives two perpendicular spike lines
+    arm_scatter=0.38, spike_taper_arcsec=2.0,
+    # Per-star ranges (uniform unless noted).
+    spike_scale_sigma=0.3,  # lognormal
+    spike_core_arcsec=(0.5, 1.5), spike_slope=(2.0, 2.4), spike_width=(1.1, 1.7),  # width in units of the PSF FWHM
+    halo_cut_arcsec=(20.0, 35.0), streak_strength=(0.1, 0.35),
+    saturation_r=(6300.0, 19100.0),  # nJy/pixel, log-uniform; other bands scale by saturation_ratio
+    saturation_ratio=dict(u=1.92, g=0.98, r=1.0, i=0.84, z=1.16, y=2.59),
+    # Saturated cores: flat rows whose values scatter around the saturation level (coloured stripes in gri).
+    row_scatter=0.15, row_correlation=2.0, core_stretch=(1.0, 1.25), core_shift_px=1.5,
 )
 
 PHYS: dict[str, Any] = dict(

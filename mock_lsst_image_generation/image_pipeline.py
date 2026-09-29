@@ -24,7 +24,7 @@ import numpy as np
 from .catalogue_pipeline import load_mock_catalogue
 from .coadd_synthesis import coadd_grid, single_coadd, synthesise_coadd
 from .config import CATALOGUE_STEM, IMAGE_CONFIG, catalogue_index
-from .galaxy_rendering import render_catalogue
+from .galaxy_rendering import render_catalogue, split_stars
 
 MODES = ("training", "all", "single")
 
@@ -62,7 +62,9 @@ def generate_catalogue_images(catalogue, name, out_dir, mode="training", cfg=Non
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n===== [{name}] rendering at the base PSF, FWHM = {cfg['base_fwhm']}\" =====", flush=True)
-    base_image, origin = render_catalogue(catalogue, {band: cfg["base_fwhm"] for band in cfg["bands"]}, cfg, n_workers)
+    base_image, origin = render_catalogue(catalogue, {band: cfg["base_fwhm"] for band in cfg["bands"]}, cfg, n_workers,
+                                          star_seed=index)
+    stars = split_stars(catalogue.galaxies)[1]
     np.save(out_dir / "base_clean_signal.npy", base_image)
     write_json(out_dir / "base_meta.json", dict(split=name, origin=list(origin), bands=cfg["bands"],
                                                 base_fwhm=cfg["base_fwhm"], shape=list(base_image.shape),
@@ -72,7 +74,7 @@ def generate_catalogue_images(catalogue, name, out_dir, mode="training", cfg=Non
     manifest_coadds = {}
     for key, coadd in coadds.items():
         if save:
-            signal, variance = synthesise_coadd(base_image, coadd, cfg)
+            signal, variance = synthesise_coadd(base_image, coadd, cfg, stars, origin)
             np.save(out_dir / f"{name}_{key}_signal.npy", signal)
             np.save(out_dir / f"{name}_{key}_variance.npy", variance)
             del signal, variance

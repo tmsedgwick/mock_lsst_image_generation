@@ -38,7 +38,7 @@ def cosmos():
 
 @pytest.fixture(scope="module")
 def catalogue(cosmos):
-    return quiet(build_mock_catalogue, cosmos, dict(seed=42, npix=1000))
+    return quiet(build_mock_catalogue, cosmos, dict(seed=42, npix=1000, stars=False))  # galaxies only; see test_stars
 
 
 def test_shipped_cosmos_subset_loads(cosmos):
@@ -100,11 +100,13 @@ def test_clump_counts_follow_host_population(catalogue):
 
 
 def test_same_seed_same_catalogue_different_seed_differs(cosmos, catalogue):
-    again = quiet(build_mock_catalogue, cosmos, dict(seed=42, npix=1000))
+    again = quiet(build_mock_catalogue, cosmos, dict(seed=42, npix=1000, stars=False))
     for name in ("galaxies", "clumps", "tidal_pairs", "tidal_blobs"):
         assert getattr(again, name).equals(getattr(catalogue, name)), name
-    other = quiet(build_mock_catalogue, cosmos, dict(seed=7, npix=1000)).galaxies
+    other = quiet(build_mock_catalogue, cosmos, dict(seed=7, npix=1000, stars=False)).galaxies
     assert not other.equals(catalogue.galaxies)
+    with_stars = [quiet(build_mock_catalogue, cosmos, dict(seed=42, npix=1000)).galaxies for _ in range(2)]
+    assert with_stars[0].equals(with_stars[1])  # star rows are reproducible too
 
 
 def test_generate_writes_all_csvs(cosmos, tmp_path):

@@ -2,10 +2,11 @@
 
 from .catalogue_pipeline import (MockCatalogue, build_mock_catalogue, generate_mock_catalogues, load_mock_catalogue,
                                  save_mock_catalogue)
-from .config import CATALOGUE_STEM, CONFIG, IMAGE_CONFIG, N_CATALOGUES, PHYS, catalogue_splits
+from .config import CATALOGUE_STEM, CONFIG, IMAGE_CONFIG, N_CATALOGUES, PHYS, STAR_CONFIG, catalogue_splits
 from .cosmos_catalogue import DEFAULT_COSMOS_PATH, load_cosmos2025_catalogue
 from .image_pipeline import generate_catalogue_images, generate_mock_images
 
-__all__ = ["CATALOGUE_STEM", "CONFIG", "DEFAULT_COSMOS_PATH", "IMAGE_CONFIG", "N_CATALOGUES", "PHYS", "MockCatalogue",
-           "build_mock_catalogue", "catalogue_splits", "generate_catalogue_images", "generate_mock_catalogues",
-           "generate_mock_images", "load_cosmos2025_catalogue", "load_mock_catalogue", "save_mock_catalogue"]
+__all__ = ["CATALOGUE_STEM", "CONFIG", "DEFAULT_COSMOS_PATH", "IMAGE_CONFIG", "N_CATALOGUES", "PHYS", "STAR_CONFIG",
+           "MockCatalogue", "build_mock_catalogue", "catalogue_splits", "generate_catalogue_images",
+           "generate_mock_catalogues", "generate_mock_images", "load_cosmos2025_catalogue", "load_mock_catalogue",
+           "save_mock_catalogue"]
