@@ -2,7 +2,9 @@
 
 The clump light fraction rises with sSFR and towards low mass; clumps avoid the disc centre, follow the disc
 inclination and position angle, and take their light from the disc (whose Re is refit so the half-light radius of
-disc + clumps is unchanged).
+disc + clumps is unchanged). Clump positions are drawn in proportion to the disc's light, so to its number of stars:
+for a smooth disc that is the exponential profile, and for a galaxy with a Hubble type's arms, bar or irregularity
+(hubble_types.py) it is that structured light, so clumps crowd onto the arms.
 """
 
 import numpy as np
@@ -10,6 +12,7 @@ import pandas as pd
 from scipy.optimize import brentq
 
 from .bulge_disc_decomposition import SERSIC_B1, refresh_disc_photometry, sersic_enclosed_fraction
+from .galaxy_structure import has_structure, structure_weight
 from .photometry import LSST_BAND_WAVE_A
 from .utils import is_resolved, resolved_mask
 
@@ -51,6 +54,20 @@ def clump_relative_flux(rest_wave, ug, gr):
     return 10.0 ** yq
 
 
+def follow_structure(row, rd, r0, rmax, n, n_candidates=200):
+    """Disc-plane radii and azimuths of n clumps for a galaxy with arms / bar / irregularity: candidates drawn from
+    the smooth disc (as draw_galaxy_clumps does) are resampled in proportion to structure_weight, so positions follow
+    the structured disc light. Uses the galaxy's own random stream (structure_seed), leaving the catalogue's intact."""
+    rng = np.random.default_rng([int(row["structure_seed"]), 1])
+    rad = rng.gamma(2.0, rd, size=n * n_candidates)
+    keep = (rng.random(len(rad)) < 1.0 - np.exp(-(rad / max(r0, 1e-6))**2)) & (rad <= rmax)
+    rad = rad[keep]
+    phi = rng.uniform(0, 2*np.pi, len(rad))
+    weight = structure_weight(row, rad * np.cos(phi), rad * np.sin(phi))
+    pick = rng.choice(len(rad), size=n, replace=False, p=weight / weight.sum())
+    return rad[pick], phi[pick]
+
+
 def draw_galaxy_clumps(row, cfg, rng):
     """Clump records (offsets, radius, width, colours, per-band flux) for one galaxy; [] if it gets none."""
     if row.get("type", "") != "star_forming" or not is_resolved(row, cfg):
@@ -75,7 +92,10 @@ def draw_galaxy_clumps(row, cfg, rng):
         rad.extend(r_try[keep & (r_try <= rmax)].tolist())
     rad = np.array(rad[:n])
     phi = rng.uniform(0, 2*np.pi, n)
-    x0, y0 = rad * np.cos(phi), q * rad * np.sin(phi)
+    if has_structure(row, 0.0):
+        rad, phi = follow_structure(row, rd, r0, rmax, n)
+    # Disc plane to sky as GalSim draws the disc: its shear keeps area, stretching the major axis by 1 / sqrt(q).
+    x0, y0 = rad * np.cos(phi) / np.sqrt(q), np.sqrt(q) * rad * np.sin(phi)
     dx, dy = x0 * np.cos(pa) - y0 * np.sin(pa), x0 * np.sin(pa) + y0 * np.cos(pa)
     ug, gr = sample_clump_colours(n, rng)
 

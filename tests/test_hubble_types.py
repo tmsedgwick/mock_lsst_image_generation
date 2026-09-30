@@ -4,9 +4,10 @@ import numpy as np
 import pandas as pd
 
 from mock_lsst_image_generation.galaxy_rendering import render_galaxy
-from mock_lsst_image_generation.galaxy_structure import structure_images
+from mock_lsst_image_generation.galaxy_structure import structure_images, structure_weight
 from mock_lsst_image_generation.hubble_types import (BROAD, add_hubble_types, broad_probabilities, class_density,
                                                      draw_structure)
+from mock_lsst_image_generation.sf_clump_generation import follow_structure
 
 TYPES = {f"E{n}" for n in range(8)} | {"S0", "SB0", "Sa", "Sb", "Sc", "SBa", "SBb", "SBc", "Irr"}
 
@@ -81,3 +82,16 @@ def test_rendered_spiral_keeps_band_fluxes():
     assert np.allclose(spiral.sum(axis=(1, 2)), plain.sum(axis=(1, 2)), rtol=0.01)
     assert np.abs(spiral - plain).max() > 0.05 * plain.max()
     assert spiral.min() > -1e-3 * plain.max()
+
+
+def test_clumps_crowd_onto_the_arms():
+    """Clump positions follow the structured light: the arm-to-smooth light ratio where clumps land averages well
+    above its value at positions drawn from the smooth disc (which is 1 on average)."""
+    record = galaxy_record("Sc", structure_seed=5)
+    rd = record["re_disc_arcsec"] / 1.678
+    rad, phi = follow_structure(record, rd, 0.5, 4.0, 400)
+    on_arms = structure_weight(record, rad * np.cos(phi), rad * np.sin(phi)).mean()
+    rng = np.random.default_rng(0)
+    r_any, phi_any = rng.gamma(2.0, rd, 4000), rng.uniform(0, 2 * np.pi, 4000)
+    anywhere = structure_weight(record, r_any * np.cos(phi_any), r_any * np.sin(phi_any)).mean()
+    assert on_arms > 1.3 * anywhere

@@ -63,6 +63,23 @@ def face_on_disc(u, v, record, h, modes):
     return smooth, barred, barred * np.maximum(1 + pattern, 0.02)
 
 
+def irregular_modes(record):
+    """(amplitude, phase, radial twist, m) of an irregular's random low-order modes, fixed by its structure_seed."""
+    if not record["irregularity"] > 0:
+        return []
+    rng = np.random.default_rng(int(record["structure_seed"]))
+    return [(record["irregularity"] / m ** 0.7, rng.uniform(0, 2 * np.pi), rng.normal(0, 1.5), m)
+            for m in range(1, N_IRREGULAR_MODES + 1)]
+
+
+def structure_weight(record, u, v):
+    """Surface brightness of the disc with its arms / bar / clumps relative to the smooth disc, at disc-plane
+    coordinates (u, v) in the midplane: how much more light (so how many more stars) the structure puts there."""
+    h = float(record["re_disc_arcsec"]) / SERSIC_B1
+    smooth, _, shaped = face_on_disc(u, v, record, h, irregular_modes(record))
+    return shaped / np.maximum(smooth, 1e-300)
+
+
 def structure_images(record, x_offsets, y_offsets):
     """(bar, arms, depth) for a grid of sky offsets (arcsec) from the galaxy centre: the bar and arm / clump images
     per unit disc flux, and the deepest fraction of the barred disc's light the arms remove anywhere."""
@@ -73,9 +90,7 @@ def structure_images(record, x_offsets, y_offsets):
     cos_i = min(max(1.0 - float(record["ellipticity_disc"]), MIN_COS_INCLINATION), 1.0)
     sin_i = np.sqrt(1 - cos_i ** 2)
 
-    rng = np.random.default_rng(int(record["structure_seed"]))
-    modes = [(record["irregularity"] / m ** 0.7, rng.uniform(0, 2 * np.pi), rng.normal(0, 1.5), m)
-             for m in range(1, N_IRREGULAR_MODES + 1)] if record["irregularity"] > 0 else []
+    modes = irregular_modes(record)
     nodes, weights = np.polynomial.hermite_e.hermegauss(N_VERTICAL_NODES)
     smooth = barred = shaped = 0.0
     for z, weight in zip(nodes * DISC_THICKNESS * h, weights / weights.sum()):

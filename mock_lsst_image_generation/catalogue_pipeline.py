@@ -148,6 +148,8 @@ def build_mock_catalogue(cosmos, cfg=None, phys=None):
     if cfg["assign_positions_after_observables"]:
         mock = assign_clustered_positions(mock, cfg, grids, rng)
 
+    if cfg["hubble_types"]:  # before the clumps, which follow the arms; own random stream, so nothing else changes
+        mock = add_hubble_types(mock, np.random.default_rng([cfg["seed"], 2]))
     mock, tidal_pairs = select_tidal_pairs(mock, cfg, rng) if cfg["tidal_streams"] else (mock, pd.DataFrame())
     clumps, tidal_blobs = pd.DataFrame(), pd.DataFrame()
     if cfg["sf_clumps"]:
@@ -158,8 +160,6 @@ def build_mock_catalogue(cosmos, cfg=None, phys=None):
         mock, tidal_blobs = add_tidal_streams(mock, tidal_pairs, cfg, rng)
     print("Projection edge distance percentiles:")
     print(np.nanpercentile(mock["projection_edge_distance"], [1, 16, 50, 84, 99]))
-    if cfg["hubble_types"]:  # own random stream, so the rest of the catalogue is identical with or without them
-        mock = add_hubble_types(mock, np.random.default_rng([cfg["seed"], 2]))
     if cfg["stars"]:  # own random stream, so the galaxies are identical with or without stars
         mock = add_stars(mock, cfg, np.random.default_rng([cfg["seed"], 1]))
     return MockCatalogue(mock, clumps, tidal_blobs, tidal_pairs, pdf, donors)
