@@ -47,11 +47,19 @@ def test_add_hubble_types_labels_galaxies_only_and_is_reproducible():
 
 
 def galaxy_record(hubble_type, **overrides):
-    structure = draw_structure(np.array([hubble_type], dtype=object), np.random.default_rng(3)).iloc[0].to_dict()
-    record = dict(x_img=60.3, y_img=58.7, pa_deg=30.0, re_bulge_arcsec=0.5, re_disc_arcsec=2.0,
-                  ellipticity_bulge=0.2, ellipticity_disc=0.4, n_bulge=4.0, n_disc=1.0, hubble_type=hubble_type,
-                  **structure, **{f"flux_{band}_{c}": 1e4 for band in "gri" for c in ["bulge", "disc"]})
+    structure = draw_structure(np.array([hubble_type], dtype=object), np.random.default_rng(3)).iloc[0]
+    record = dict(x_img=60.3, y_img=58.7, pa_deg=30.0, re_bulge_arcsec=0.5, re_disc_arcsec=2.0, ellipticity_bulge=0.2,
+                  ellipticity_disc=0.4, n_bulge=4.0, n_disc=1.0, hubble_type=hubble_type)
+    record.update({str(key): value for key, value in structure.items()})
+    record.update({f"flux_{band}_{c}": 1e4 for band in "gri" for c in ["bulge", "disc"]})
     return {**record, **overrides}
+
+
+def render(record, **kwargs):
+    """The stamp cube render_galaxy draws for a record (which must have something to draw)."""
+    stamp = render_galaxy(record, dict(g=0.5, r=0.5, i=0.5), "gri", 0.2, 25, **kwargs)
+    assert stamp is not None
+    return stamp[2]
 
 
 def test_structure_moves_disc_light_without_changing_its_flux():
@@ -65,20 +73,16 @@ def test_structure_moves_disc_light_without_changing_its_flux():
 
 def test_structure_never_makes_negative_light():
     """Edge-on and face-on discs of every structured type: the stamp stays non-negative in every band."""
-    psf = dict(g=0.5, r=0.5, i=0.5)
     for hubble_type in ["SBb", "Sa", "Sc", "Irr"]:
         for ellipticity in [0.0, 0.5, 0.85]:
             record = galaxy_record(hubble_type, ellipticity_disc=ellipticity)
-            _, _, plain = render_galaxy(record, psf, "gri", 0.2, 25)
-            _, _, cube = render_galaxy(record, psf, "gri", 0.2, 25, structure_min_re_arcsec=0.4)
+            plain, cube = render(record), render(record, structure_min_re_arcsec=0.4)
             assert cube.min() > -1e-3 * plain.max(), (hubble_type, ellipticity)
 
 
 def test_rendered_spiral_keeps_band_fluxes():
-    psf = dict(g=0.5, r=0.5, i=0.5)
     record = galaxy_record("SBc")
-    _, _, plain = render_galaxy(record, psf, "gri", 0.2, 25)
-    _, _, spiral = render_galaxy(record, psf, "gri", 0.2, 25, structure_min_re_arcsec=0.4)
+    plain, spiral = render(record), render(record, structure_min_re_arcsec=0.4)
     assert np.allclose(spiral.sum(axis=(1, 2)), plain.sum(axis=(1, 2)), rtol=0.01)
     assert np.abs(spiral - plain).max() > 0.05 * plain.max()
     assert spiral.min() > -1e-3 * plain.max()

@@ -92,7 +92,7 @@ def structure_images(record, x_offsets, y_offsets):
 
     modes = irregular_modes(record)
     nodes, weights = np.polynomial.hermite_e.hermegauss(N_VERTICAL_NODES)
-    smooth = barred = shaped = 0.0
+    smooth, barred, shaped = np.zeros_like(major), np.zeros_like(major), np.zeros_like(major)
     for z, weight in zip(nodes * DISC_THICKNESS * h, weights / weights.sum()):
         # GalSim's shear keeps area (re is the circularised radius), so the disc plane is scaled by sqrt(cos i) too.
         layer = face_on_disc(major * np.sqrt(cos_i), (minor + z * sin_i) / np.sqrt(cos_i), record, h, modes)

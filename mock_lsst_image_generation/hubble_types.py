@@ -27,6 +27,8 @@ The arm, bar and irregularity parameters drawn for rendering (draw_structure) ar
 literature: pitch angle and arm contrast grow from Sa to Sc, as observed.
 """
 
+from typing import NamedTuple
+
 import numpy as np
 import pandas as pd
 
@@ -88,9 +90,15 @@ MELVIN14_BAR_DECLINE = (0.4, 1.0, 0.5)  # the bar fraction falls by this factor 
 
 # Structure drawn per type for rendering: (mean, scatter) of arm pitch angle (deg) and arm contrast, and the arms'
 # sharpness (power of the arm profile). Visual choices, see the module docstring.
-SPIRAL_STRUCTURE = dict(a=dict(pitch=(10, 2), strength=(0.55, 0.1), sharpness=3),
-                        b=dict(pitch=(16, 3), strength=(0.70, 0.1), sharpness=4),
-                        c=dict(pitch=(24, 4), strength=(0.85, 0.08), sharpness=5))
+class SpiralStructure(NamedTuple):
+    pitch: tuple[float, float]
+    strength: tuple[float, float]
+    sharpness: float
+
+
+SPIRAL_STRUCTURE = dict(a=SpiralStructure(pitch=(10, 2), strength=(0.55, 0.1), sharpness=3),
+                        b=SpiralStructure(pitch=(16, 3), strength=(0.70, 0.1), sharpness=4),
+                        c=SpiralStructure(pitch=(24, 4), strength=(0.85, 0.08), sharpness=5))
 BAR_RADIUS_H = 1.6  # arms start at the bar's end, in disc scale lengths; unbarred arms start at ARM_START_H
 ARM_START_H = 0.5
 IRREGULARITY = (0.5, 0.1)  # amplitude of an Irr's random low-order modes
@@ -136,7 +144,8 @@ def comoving_volume(z_lo, z_hi, area_arcmin2):
 def mass_range(z_bin, state):
     """(lowest, highest) log mass HC16 measured in this bin and state: the completeness limit, and where the mass
     function of all galaxies drops below MIN_PER_DEX galaxies per dex in their survey."""
-    volume = comoving_volume(*(float(v) for v in z_bin.split("-")), HC16_AREA_ARCMIN2)
+    z_lo, z_hi = (float(v) for v in z_bin.split("-"))
+    volume = comoving_volume(z_lo, z_hi, HC16_AREA_ARCMIN2)
     logM = np.arange(9.0, 12.5, 0.01)
     per_dex = schechter(logM, *HC16["all", fitted_bin(z_bin, state)][state][2:]) * 1e-3 * volume
     return HC16["all", z_bin][state][1], float(logM[np.argmax(per_dex < MIN_PER_DEX)])
@@ -196,9 +205,9 @@ def draw_structure(types, rng):
     for stage, s in SPIRAL_STRUCTURE.items():
         rows = np.flatnonzero([t in (f"S{stage}", f"SB{stage}") for t in types])
         out.loc[rows, "n_arms"] = 2
-        out.loc[rows, "arm_pitch_deg"] = np.clip(rng.normal(*s["pitch"], len(rows)), 5, 40)
-        out.loc[rows, "arm_strength"] = np.clip(rng.normal(*s["strength"], len(rows)), 0.2, 0.95)
-        out.loc[rows, "arm_sharpness"] = float(s["sharpness"])
+        out.loc[rows, "arm_pitch_deg"] = np.clip(rng.normal(*s.pitch, len(rows)), 5, 40)
+        out.loc[rows, "arm_strength"] = np.clip(rng.normal(*s.strength, len(rows)), 0.2, 0.95)
+        out.loc[rows, "arm_sharpness"] = float(s.sharpness)
     irregular = np.flatnonzero(types == "Irr")
     out.loc[irregular, "irregularity"] = np.clip(rng.normal(*IRREGULARITY, len(irregular)), 0.1, 0.9)
     return out
