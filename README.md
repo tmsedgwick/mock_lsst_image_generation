@@ -22,6 +22,11 @@ python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-
 - **Extras:** star-forming clumps and tidal bridges between interacting pairs
 - **Stars:** bright LSST-like stars with band-dependent diffraction spikes, halos and saturated cores, calibrated on
   a real LSSTCam deep coadd (`stars.py`, settings in `STAR_CONFIG`)
+- **Hubble types:** each galaxy gets a type (E0-E7, S0, Sa-Sc, barred SB0-SBc, Irr), drawn with probabilities
+  from published morphological mass functions (Huertas-Company et al. 2016), T-type ratios (Nair & Abraham 2010)
+  and bar fractions (Erwin 2018; Melvin et al. 2014). Resolved discs are drawn with the spiral arms, bar or
+  irregular clumps of their type, as light moved within the disc so band fluxes are unchanged (`hubble_types.py`,
+  `galaxy_structure.py`)
 
 `catalogue_pipeline.build_mock_catalogue` ties these together. All settings live in `config.py` (`CONFIG`, `PHYS`,
 and `IMAGE_CONFIG` for the images); pass a partial dict to override any of them.
@@ -85,6 +90,11 @@ Star rows have positions, `mag_<band>_total` / `flux_<band>_total` for ugrizy, a
 spikes, halo and saturation (galaxy-only columns are empty for them). Stars have their own random stream, so the
 galaxies are identical with or without them; pass `dict(stars=False)` to `build_mock_catalogue` to leave them out.
 Their spike angles (shared by every star in an image) and saturated cores are drawn when the images are made.
+
+Galaxy rows also carry `hubble_type` and the parameters that shape its structure (`n_arms`, `arm_pitch_deg`,
+`arm_strength`, `arm_sharpness`, `arm_phase_deg`, `arm_start_h`, `barred`, `irregularity`, `structure_seed`), from
+their own random stream; pass `dict(hubble_types=False)` to leave them out. Structure is drawn on discs with
+`re_disc_arcsec` of at least `IMAGE_CONFIG["structure_min_re_arcsec"]` (0.4").
 
 ## Generate images
 

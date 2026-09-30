@@ -9,11 +9,13 @@ convention: canvas pixel (x, y) is image[:, y - 1, x - 1], and frame pixel x_pix
 import multiprocessing as mp
 from collections import deque
 from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 
 import galsim
 import numpy as np
 from tqdm import tqdm
 
+from .galaxy_structure import add_structure, has_structure
 from .stars import render_stars
 
 # GalSim >= 2.8 refuses very large FFTs unless this is False; big, extended galaxies must still be drawn in full.
@@ -21,6 +23,8 @@ if hasattr(galsim.errors, "raise_fft_size_error"):
     galsim.errors.raise_fft_size_error = False
 
 COMPONENTS = [("bulge", 4.0), ("disc", 1.0)]  # (name, default Sersic index)
+STRUCTURE_COLUMNS = ["hubble_type", "n_arms", "arm_pitch_deg", "arm_strength", "arm_sharpness", "arm_phase_deg",
+                     "arm_start_h", "barred", "irregularity", "structure_seed"]  # from hubble_types.add_hubble_types
 
 
 def positive_flux(record, column):
@@ -46,8 +50,9 @@ def draw_stamp(band_profiles, support_profiles, x, y, n_bands, pixscale, min_sta
     return bounds.xmin, bounds.ymin, cube
 
 
-def render_galaxy(record, psf_fwhm, bands, pixscale, min_stamp_pix):
-    """Bulge + disc stamp for one galaxy record, or None if neither component has a valid size, shape and flux."""
+def render_galaxy(record, psf_fwhm, bands, pixscale, min_stamp_pix, structure_min_re_arcsec=None):
+    """Bulge + disc stamp for one galaxy record, or None if neither component has a valid size, shape and flux.
+    Discs with re_disc_arcsec >= structure_min_re_arcsec also get the arms / bar / clumps of their Hubble type."""
     angle = float(record["pa_deg"]) * galsim.degrees
     components = {}
     for name, default_n in COMPONENTS:
@@ -70,8 +75,11 @@ def render_galaxy(record, psf_fwhm, bands, pixscale, min_stamp_pix):
         support_profiles += [galsim.Convolve([part, psf]) for part in parts]
         if parts:
             band_profiles[band_index] = galsim.Convolve([parts[0] if len(parts) == 1 else galsim.Add(parts), psf])
-    return draw_stamp(band_profiles, support_profiles, float(record["x_img"]), float(record["y_img"]), len(bands),
-                      pixscale, min_stamp_pix)
+    xmin, ymin, cube = draw_stamp(band_profiles, support_profiles, float(record["x_img"]), float(record["y_img"]),
+                                  len(bands), pixscale, min_stamp_pix)
+    if structure_min_re_arcsec is not None and "disc" in components and has_structure(record, structure_min_re_arcsec):
+        add_structure(cube, xmin, ymin, record, bands, psf_fwhm, pixscale)
+    return xmin, ymin, cube
 
 
 def render_blob(record, psf_fwhm, bands, pixscale, min_stamp_pix):
@@ -172,8 +180,10 @@ def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1, star_seed=0):
     galaxy_columns = ["x_img", "y_img", "pa_deg", "re_bulge_arcsec", "re_disc_arcsec", "ellipticity_bulge",
                       "ellipticity_disc", "n_bulge", "n_disc",
                       *[f"flux_{band}_{name}" for band in bands for name, _ in COMPONENTS]]
+    galaxy_columns += [column for column in STRUCTURE_COLUMNS if column in galaxies]
     galaxy_records = to_records(galaxies, galaxy_columns, ["x_img", "y_img", "pa_deg"], origin)
-    image = render_records(render_galaxy, galaxy_records, shape, psf_fwhm, cfg, n_workers, "galaxies")
+    render = partial(render_galaxy, structure_min_re_arcsec=cfg.get("structure_min_re_arcsec"))
+    image = render_records(render, galaxy_records, shape, psf_fwhm, cfg, n_workers, "galaxies")
 
     blob_columns = ["x_img", "y_img", "sigma_arcsec", *[f"flux_{band}" for band in bands]]
     blob_tables = [("clumps", catalogue.clumps, lambda table: clump_blobs(table, bands)),

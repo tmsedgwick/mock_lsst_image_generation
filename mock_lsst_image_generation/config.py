@@ -84,6 +84,9 @@ CONFIG: dict[str, Any] = dict(
     resolved_re_col="re_total_arcsec",
     # Bright stars (see stars.py and STAR_CONFIG): added to the catalogue as rows with type "star".
     stars=True,
+    # Hubble types drawn from published mass functions, with the arm / bar / clump parameters they imply
+    # (hubble_types.py).
+    hubble_types=True,
 )
 
 # Stars, calibrated on the stars of a real LSSTCam deep coadd (StarSimulation.ipynb). Only g, r and i were calibrated:
@@ -140,6 +143,8 @@ IMAGE_CONFIG: dict[str, Any] = dict(
     # Catalogues whose coadds are not saved by default: training code rebuilds them on the fly from the base image.
     on_the_fly_catalogues=["train", "valid"],
     min_stamp_pix=25,  # smallest GalSim stamp; there is deliberately no maximum, so no flux is clipped
+    # Spiral arms, bars and irregular clumps (galaxy_structure.py) are drawn on discs at least this large (arcsec).
+    structure_min_re_arcsec=0.4,
 )
 
 

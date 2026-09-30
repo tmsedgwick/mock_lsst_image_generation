@@ -1,0 +1,124 @@
+"""Spiral arms, bars and irregular clumps for resolved discs, as light moved around within the catalogue's disc.
+
+The disc's own light is redistributed by azimuthal Fourier modes in the disc plane (r, theta), so band fluxes are
+unchanged:
+    arms         1 + A [w(m (theta - ln(r / r0) / tan(pitch))) - 1], w = ((1 + cos) / 2)^k normalised to average 1
+                 around each ring: m logarithmic spiral arms starting at r0
+    bar          inside r0 the disc's light is flattened and gathered into an m = 2 mode lined up with where the arms
+                 start, so the arms grow from the bar's ends
+    irregular    random low-order modes with a radial twist (lopsided, clumpy light)
+The disc is 3D (Gaussian vertical profile, scale height DISC_THICKNESS x the scale length) and seen at the inclination
+its catalogue axis ratio implies, via the exact line-of-sight projection
+    (1 / cos i) integral of Sigma(x, (y + z sin i) / cos i) f(z) dz          (x along the major axis)
+done by Gauss-Hermite quadrature. The result is two images per unit disc flux, each summing to zero: the bar part
+(the disc's colours) and the arm / clump part (bluer: scaled per band by ARM_COLOUR_BOOST). GalSim's smooth disc
+stays as it is; these images are added on top of its stamp, convolved with the same Gaussian PSF.
+"""
+
+import numpy as np
+from scipy.ndimage import gaussian_filter
+from scipy.special import gammaincinv, gammaln
+
+ARM_COLOUR_BOOST = dict(u=1.4, g=1.25, r=1.0, i=0.8, z=0.7, y=0.65)  # arm contrast per band (young stars are blue)
+BAR_STRENGTH, BAR_SHARPNESS, BAR_FLATNESS = 0.9, 6.0, 4.0  # bar mode amplitude, power, flattening of the disc inside
+DISC_THICKNESS = 0.12  # vertical scale height / radial scale length
+MIN_COS_INCLINATION = 0.05  # as galaxy_rendering clips the disc axis ratio
+N_VERTICAL_NODES = 3
+N_IRREGULAR_MODES = 5
+EXTENT_H = 6.0  # structure is computed out to this many scale lengths from the centre
+OVERSAMPLE = 3  # sub-pixels per pixel side: pixel-integrated like GalSim's disc, so thin discs subtract cleanly
+SERSIC_B1 = 1.678  # half-light radius / scale length of an exponential disc
+
+
+def mode_mean(k):
+    """Mean of ((1 + cos) / 2)^k over a full turn."""
+    return np.exp(gammaln(k + 0.5) - gammaln(k + 1)) / np.sqrt(np.pi)
+
+
+def face_on_disc(u, v, record, h, modes):
+    """(smooth disc, disc with its bar, the same with its arms / clumps) surface brightness at disc-plane coordinates
+    (u, v)."""
+    n = float(record["n_disc"]) if np.isfinite(record["n_disc"]) else 1.0
+    re = float(record["re_disc_arcsec"])
+    r, theta = np.hypot(u, v), np.arctan2(v, u)
+    smooth = np.exp(-gammaincinv(2 * n, 0.5) * (r / re) ** (1 / n))
+
+    r0, phase = record["arm_start_h"] * h, np.radians(record["arm_phase_deg"])
+    start = 1 / (1 + np.exp(-(r - r0) / (0.25 * h)))
+    barred = smooth
+    if record["barred"]:
+        bar_mode = ((1 + np.cos(2 * (theta + phase))) / 2) ** BAR_SHARPNESS / mode_mean(BAR_SHARPNESS) - 1
+        centre = 1 - np.exp(-(r / (0.12 * r0)) ** 2)
+        flatten = np.where(r < r0, np.exp((r - r0) * (1 - 1 / BAR_FLATNESS) / h), 1)
+        barred = smooth * flatten * (1 + BAR_STRENGTH * (1 - start) * centre * bar_mode)
+
+    pattern = np.zeros_like(r)
+    if record["n_arms"] > 0:
+        k = record["arm_sharpness"]
+        psi = record["n_arms"] * (theta - np.log(np.maximum(r, 1e-3) / r0) / np.tan(np.radians(record["arm_pitch_deg"]))
+                                  + phase)
+        pattern += record["arm_strength"] * start * (((1 + np.cos(psi)) / 2) ** k / mode_mean(k) - 1)
+    for amplitude, mode_phase, twist, m in modes:
+        pattern += amplitude * np.cos(m * theta + mode_phase + twist * r / h)
+    return smooth, barred, barred * np.maximum(1 + pattern, 0.02)
+
+
+def structure_images(record, x_offsets, y_offsets):
+    """(bar, arms, depth) for a grid of sky offsets (arcsec) from the galaxy centre: the bar and arm / clump images
+    per unit disc flux, and the deepest fraction of the barred disc's light the arms remove anywhere."""
+    h = float(record["re_disc_arcsec"]) / SERSIC_B1
+    pa = np.radians(float(record["pa_deg"]))
+    x, y = np.meshgrid(x_offsets, y_offsets)
+    major, minor = x * np.cos(pa) + y * np.sin(pa), -x * np.sin(pa) + y * np.cos(pa)
+    cos_i = min(max(1.0 - float(record["ellipticity_disc"]), MIN_COS_INCLINATION), 1.0)
+    sin_i = np.sqrt(1 - cos_i ** 2)
+
+    rng = np.random.default_rng(int(record["structure_seed"]))
+    modes = [(record["irregularity"] / m ** 0.7, rng.uniform(0, 2 * np.pi), rng.normal(0, 1.5), m)
+             for m in range(1, N_IRREGULAR_MODES + 1)] if record["irregularity"] > 0 else []
+    nodes, weights = np.polynomial.hermite_e.hermegauss(N_VERTICAL_NODES)
+    smooth = barred = shaped = 0.0
+    for z, weight in zip(nodes * DISC_THICKNESS * h, weights / weights.sum()):
+        # GalSim's shear keeps area (re is the circularised radius), so the disc plane is scaled by sqrt(cos i) too.
+        layer = face_on_disc(major * np.sqrt(cos_i), (minor + z * sin_i) / np.sqrt(cos_i), record, h, modes)
+        smooth, barred, shaped = smooth + weight * layer[0], barred + weight * layer[1], shaped + weight * layer[2]
+    arms = shaped * barred.sum() / shaped.sum() - barred  # rescaled so arms / clumps only move light
+    depth = float(np.max(-arms / np.maximum(barred, 1e-30 * barred.max())))
+    return barred / barred.sum() - smooth / smooth.sum(), arms / barred.sum(), depth
+
+
+def has_structure(record, min_re_arcsec):
+    """Whether a galaxy record has arms, a bar or clumps, on a disc large enough to show them."""
+    if "hubble_type" not in record or not isinstance(record["hubble_type"], str):
+        return False
+    shaped = record["n_arms"] > 0 or record["barred"] or record["irregularity"] > 0
+    return bool(shaped and np.isfinite(record["re_disc_arcsec"]) and record["re_disc_arcsec"] >= min_re_arcsec
+                and np.isfinite(record["ellipticity_disc"]))
+
+
+def add_structure(cube, xmin, ymin, record, bands, psf_fwhm, pixscale):
+    """Add a galaxy's arms / bar / clumps to its rendered stamp cube (band, y, x) in place, band by band scaled by
+    its disc flux and convolved with the band's Gaussian PSF. Only the part of the stamp within EXTENT_H disc scale
+    lengths of the centre is touched."""
+    size = cube.shape[1]
+    q = min(max(1.0 - float(record["ellipticity_disc"]), MIN_COS_INCLINATION), 1.0)
+    # GalSim stretches an inclined disc's major axis by 1 / sqrt(q), so the window must reach that far.
+    half = int(np.ceil(EXTENT_H * float(record["re_disc_arcsec"]) / SERSIC_B1 / np.sqrt(q) / pixscale))
+    ix, iy = int(round(record["x_img"])) - xmin, int(round(record["y_img"])) - ymin
+    x0, x1, y0, y1 = max(ix - half, 0), min(ix + half + 1, size), max(iy - half, 0), min(iy + half + 1, size)
+    if x0 >= x1 or y0 >= y1:
+        return
+    sub = (np.arange(OVERSAMPLE) + 0.5) / OVERSAMPLE - 0.5
+    offsets = lambda start, stop, centre: ((np.arange(start, stop)[:, None] + sub).ravel() - centre) * pixscale
+    bar, arms, depth = structure_images(record, offsets(xmin + x0, xmin + x1, record["x_img"]),
+                                        offsets(ymin + y0, ymin + y1, record["y_img"]))
+    shape = (y1 - y0, OVERSAMPLE, x1 - x0, OVERSAMPLE)
+    bar, arms = bar.reshape(shape).sum(axis=(1, 3)), arms.reshape(shape).sum(axis=(1, 3))
+    boost_cap = 0.95 / max(depth, 1e-3)  # bluer arms must not take more than the light between them
+    for i, band in enumerate(bands):
+        flux = float(record.get(f"flux_{band}_disc", 0.0))
+        if not (np.isfinite(flux) and flux > 0):
+            continue
+        sigma = psf_fwhm[band] / 2.355 / pixscale
+        image = flux * (bar + min(ARM_COLOUR_BOOST.get(band, 1.0), boost_cap) * arms)
+        cube[i, y0:y1, x0:x1] += gaussian_filter(image, sigma, mode="constant").astype(cube.dtype)
