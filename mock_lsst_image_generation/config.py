@@ -27,6 +27,7 @@ CONFIG: dict[str, Any] = dict(
     pdf_xcols=["logM", "logsSFR"], empirical_k=256, empirical_clip_percentiles=(0.5, 99.5),
     min_training_bands=4, allow_sed_extrapolation=True, warn_edge_distance=0.35, max_rest_edge_distance=0.55,
     # COSMOS donor quality cuts, restricted to bright, reliable HSC-r model magnitudes.
+    cosmos_galaxies_only=True,  # LePhare galaxies only: no QSO (or star) donors
     cosmos_training_z_max=6.0, cosmos_training_logm_min=7.0, cosmos_training_logm_max=12.0,
     cosmos_training_logssfr_min=-15.5, cosmos_training_logssfr_max=-7.0,
     cosmos_training_r_mag_min=20.0, cosmos_training_r_mag_max=24.0, cosmos_training_r_magerr_max=0.2,

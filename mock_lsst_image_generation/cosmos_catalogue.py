@@ -105,8 +105,16 @@ def first_existing_column(df, options, required_name=None):
 
 def standardise_cosmos_columns(cosmos, cfg):
     """Copy of a COSMOS table with standard columns z, logM, logSFR, logsSFR, Re_arcsec, ellipticity, obs_<band>
-    and obs_err_<g,r,i>, plus the list of (band, wavelength_A, column) observed bands found."""
+    and obs_err_<g,r,i>, plus the list of (band, wavelength_A, column) observed bands found.
+
+    With cfg['cosmos_galaxies_only'], only LePhare galaxies (type 0) are kept: QSOs (type 2) and stars (type 1) have
+    SEDs no galaxy has, and galaxy-template masses that mean nothing.
+    """
     c = cosmos.copy()
+    if cfg["cosmos_galaxies_only"]:
+        if "type" not in c.columns:
+            raise KeyError("cosmos_galaxies_only needs the LePhare 'type' column (0 = galaxy, 1 = star, 2 = QSO).")
+        c = c[numeric(c, "type").eq(0)]
     aliases = {
         "logM": [cfg["mass_col"], "mass_med", "mass_minchi2", "logmass", "lmass", "lp_mass_med", "lp_mass_best",
                  "ez_mass"],

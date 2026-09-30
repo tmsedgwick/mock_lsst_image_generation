@@ -1,6 +1,7 @@
 """Star-forming clumps: compact blue Gaussian knots placed in the discs of resolved star-forming galaxies.
 
-The clump light fraction rises with sSFR and towards low mass; clumps avoid the disc centre, follow the disc
+Clumps take the observed colours of the most star-forming galaxies at their host's redshift (real COSMOS SEDs via
+their donors). The clump light fraction rises with sSFR and towards low mass; clumps avoid the disc centre, follow the disc
 inclination and position angle, and take their light from the disc (whose Re is refit so the half-light radius of
 disc + clumps is unchanged). Clump positions are drawn in proportion to the disc's light, so to its number of stars:
 for a smooth disc that is the exponential profile, and for a galaxy with a Hubble type's arms, bar or irregularity
@@ -17,19 +18,6 @@ from .photometry import LSST_BAND_WAVE_A
 from .utils import is_resolved, resolved_mask
 
 
-def sample_clump_colours(n, rng, ug_mu=-0.25, gr_mu=0.05, ug_sig=0.5, gr_sig=0.3, rho=0.35, ug_range=(-0.55, 0.15),
-                         gr_range=(-0.20, 0.22)):
-    """Rest-frame (u-g, g-r) clump colours from a correlated Gaussian truncated to the given ranges."""
-    cov = np.array([[ug_sig**2, rho * ug_sig * gr_sig], [rho * ug_sig * gr_sig, gr_sig**2]])
-    out = []
-    while sum(len(x) for x in out) < n:
-        x = rng.multivariate_normal([ug_mu, gr_mu], cov, size=max(n, 8))
-        ok = (x[:, 0] >= ug_range[0]) & (x[:, 0] <= ug_range[1]) & (x[:, 1] >= gr_range[0]) & (x[:, 1] <= gr_range[1])
-        out.append(x[ok])
-    x = np.vstack(out)[:n]
-    return x[:, 0], x[:, 1]
-
-
 def target_clump_light_fraction(logM, logSFR, f_ref=0.02, ssfr_ref=-10.0, ssfr_strength=0.30, dwarf_amp=0.65,
                                 dwarf_turnover=8.85, dwarf_width=0.25, f_min=0.0, f_max=0.12):
     """Fraction of rest-frame u disc light in clumps: grows with sSFR, boosted for dwarfs, gated off when passive."""
@@ -40,18 +28,26 @@ def target_clump_light_fraction(logM, logSFR, f_ref=0.02, ssfr_ref=-10.0, ssfr_s
     return np.clip((10.0 ** logf) * sf_gate, f_min, f_max)
 
 
-def clump_relative_flux(rest_wave, ug, gr):
-    """Clump SED (relative flux, u = 1) at rest wavelength(s), interpolated and extrapolated in log-log from u, g, r."""
-    fu = 1.0
-    fg = fu / 10.0**(-0.4 * ug)
-    fr = fg / 10.0**(-0.4 * gr)
-    x = np.log10(np.array([3670.0, 4825.0, 6222.0]))
-    y = np.log10(np.array([fu, fg, fr]))
-    xq = np.log10(np.asarray(rest_wave, float))
-    yq = np.interp(xq, x, y)
-    yq = np.where(xq < x[0], y[0] + (y[1] - y[0]) / (x[1] - x[0]) * (xq - x[0]), yq)
-    yq = np.where(xq > x[-1], y[-1] + (y[-1] - y[-2]) / (x[-1] - x[-2]) * (xq - x[-1]), yq)
-    return 10.0 ** yq
+def clump_colour_templates(mock, bands, rng, z_window=0.05, min_pool=20):
+    """Picker for clump SEDs: pick(z, n) returns n rows of observed band fluxes of star-forming galaxies near
+    redshift z (|dz| < z_window (1 + z), widened to the min_pool nearest if needed) with sSFR above that slice's
+    median. Clumps are young star-forming regions, so they take the observed colours of the most star-forming
+    galaxies at their host's redshift, which are real (donor) SEDs rather than a made-up colour model."""
+    fluxes = mock[[f"flux_{b}_total" for b in bands]].to_numpy(float)
+    ok = mock["type"].eq("star_forming").to_numpy() & np.isfinite(fluxes).all(axis=1) & (fluxes > 0).all(axis=1)
+    order = np.argsort(mock["z"].to_numpy(float)[ok])
+    z, ssfr, fluxes = (mock["z"].to_numpy(float)[ok][order], mock["logsSFR"].to_numpy(float)[ok][order],
+                       fluxes[ok][order])
+
+    def pick(z0, n):
+        lo, hi = np.searchsorted(z, [z0 - z_window * (1 + z0), z0 + z_window * (1 + z0)])
+        if hi - lo < min_pool:
+            centre = int(np.searchsorted(z, z0))
+            lo, hi = max(centre - min_pool // 2, 0), min(centre + min_pool // 2, len(z))
+        window = np.arange(lo, hi)
+        window = window[ssfr[window] >= np.median(ssfr[window])]
+        return fluxes[rng.choice(window, size=n)]
+    return pick
 
 
 def follow_structure(row, rd, r0, rmax, n, n_candidates=200):
@@ -68,8 +64,9 @@ def follow_structure(row, rd, r0, rmax, n, n_candidates=200):
     return rad[pick], phi[pick]
 
 
-def draw_galaxy_clumps(row, cfg, rng):
-    """Clump records (offsets, radius, width, colours, per-band flux) for one galaxy; [] if it gets none."""
+def draw_galaxy_clumps(row, cfg, rng, pick_templates):
+    """Clump records (offsets, radius, width, per-band flux) for one galaxy; [] if it gets none. pick_templates(z, n)
+    gives each clump's band fluxes up to a scale (see clump_colour_templates)."""
     if row.get("type", "") != "star_forming" or not is_resolved(row, cfg):
         return []
     re = float(row["re_disc_arcsec"])
@@ -97,7 +94,6 @@ def draw_galaxy_clumps(row, cfg, rng):
     # Disc plane to sky as GalSim draws the disc: its shear keeps area, stretching the major axis by 1 / sqrt(q).
     x0, y0 = rad * np.cos(phi) / np.sqrt(q), np.sqrt(q) * rad * np.sin(phi)
     dx, dy = x0 * np.cos(pa) - y0 * np.sin(pa), x0 * np.sin(pa) + y0 * np.cos(pa)
-    ug, gr = sample_clump_colours(n, rng)
 
     # Normalise fluxes in the observed band closest to rest-frame u.
     rest_waves = {b: LSST_BAND_WAVE_A[b] / (1.0 + z) for b in bands}
@@ -114,13 +110,13 @@ def draw_galaxy_clumps(row, cfg, rng):
     sigma = np.clip(sigma, cfg["clump_sigma_floor_arcsec"], 0.18 * re)
 
     clumps = []
+    templates = pick_templates(z, n)
+    templates = templates / templates[:, [bands.index(anchor)]]
     for j in range(n):
-        f_anchor_sed = clump_relative_flux(rest_waves[anchor], ug[j], gr[j])
         c = dict(parent_id=int(row["id"]), clump_id=j, dx_arcsec=dx[j], dy_arcsec=dy[j], r_ell_arcsec=rad[j],
-                 r_over_re=rad[j] / re, sigma_arcsec=sigma[j], u_g=ug[j], g_r=gr[j], local_disc_sb_rel=local_sb[j],
-                 target_f_clump_u=target_f)
-        for b in bands:
-            c[f"flux_{b}_clump"] = f_anchor[j] * clump_relative_flux(rest_waves[b], ug[j], gr[j]) / f_anchor_sed
+                 r_over_re=rad[j] / re, sigma_arcsec=sigma[j], local_disc_sb_rel=local_sb[j], target_f_clump_u=target_f)
+        for k, b in enumerate(bands):
+            c[f"flux_{b}_clump"] = f_anchor[j] * templates[j, k]
         clumps.append(c)
     # Never let clumps take more than 90% of the disc light in any band.
     mx = max(sum(c[f"flux_{b}_clump"] for c in clumps) / max(float(row[f"flux_{b}_disc"]), 1e-30) for b in bands)
@@ -162,7 +158,9 @@ def add_sf_clumps(mock, cfg, rng):
     is_host = m["type"].eq("star_forming").to_numpy() & resolved_mask(m, cfg) & np.isfinite(re_disc) & (re_disc > 0)
     hosts = m.loc[is_host]
     print(f"Drawing SF clumps for {len(hosts):,} resolved star-forming galaxies", flush=True)
-    clumps = pd.DataFrame([c for row in hosts.to_dict("records") for c in draw_galaxy_clumps(row, cfg, rng)])
+    # Clump colours use their own random stream, so positions and fluxes match the old colour model draw for draw.
+    pick = clump_colour_templates(m, bands, np.random.default_rng([cfg["seed"], 3]))
+    clumps = pd.DataFrame([c for row in hosts.to_dict("records") for c in draw_galaxy_clumps(row, cfg, rng, pick)])
     if len(clumps) == 0:
         print("Added 0 SF clumps to 0 galaxies", flush=True)
         return m, clumps
