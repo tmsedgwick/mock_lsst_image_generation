@@ -19,6 +19,7 @@ CONFIG: dict[str, Any] = dict(
     # Continuous COSMOS-style GSMF sampling. Redshifts come from clustered light-cone sites, which are thinned by the
     # total evolving number density.
     gsmf_n_z=700, gsmf_n_m=900, gsmf_z_eval_min=0.2, gsmf_z_eval_max=5.5, gsmf_poisson_counts=True,
+    gsmf_local_anchor_z=(0.35, 0.6),  # GAMA-anchored below the first z, fading out by the second (None = off)
     gsmf_position_oversample=4,
     # Low-z COSMOS2025 empirical sSFR PDFs, split into SF/passive samples and evolved to each galaxy's redshift.
     ssfr_pdf_z_min=0.0, ssfr_pdf_z_max=0.3, ssfr_split=-10.0, ssfr_pdf_k=160, ssfr_reference_z=0.15,

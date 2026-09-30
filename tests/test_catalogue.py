@@ -20,9 +20,9 @@ from mock_lsst_image_generation.utils import resolved_mask
 # Counts and column sums of the reference realisation (macOS, pinned requirements). Other platforms can differ in the
 # last few decimal places, which can flip galaxies across cuts. Clump counts are tested against their distribution
 # separately because changed hosts and rejection sampling can shift the subsequent random draws.
-REFERENCE_COUNTS = dict(galaxies=4192, tidal_pairs=1, tidal_blobs=162, donors=18476)
-REFERENCE_SUMS = dict(z=9055.144360536346, logM=33459.952919856194, mag_r_total=117024.28035335393,
-                      re_total_arcsec=1203.649633665411)
+REFERENCE_COUNTS = dict(galaxies=4178, tidal_pairs=1, tidal_blobs=162, donors=18476)
+REFERENCE_SUMS = dict(z=9249.149368735783, logM=33379.6272380008, mag_r_total=116707.41968496345,
+                      re_total_arcsec=1192.202253473261)
 COUNT_TOLERANCE, SUM_TOLERANCE = 0.01, 0.01
 
 
@@ -114,3 +114,14 @@ def test_generate_writes_all_csvs(cosmos, tmp_path):
     stem = tmp_path / "mock_catalogue_train"
     for suffix in ["", "_clumps", "_tidal", "_tidal_pairs"]:
         assert (tmp_path / f"{stem.name}{suffix}.csv").exists(), suffix
+
+
+def test_low_redshift_mass_function_matches_gama():
+    """Anchored locally to Baldry et al. 2012 (GAMA): exact at z <= gsmf_z_eval_min, unchanged above the fade-out."""
+    from mock_lsst_image_generation.gsmf_sampling import gama_gsmf, quiescent_gsmf, star_forming_gsmf
+    logm = np.linspace(7.0, 11.5, 10)
+    local = star_forming_gsmf(logm, 0.1) + quiescent_gsmf(logm, 0.1)
+    np.testing.assert_allclose(local, gama_gsmf(logm), rtol=1e-6)
+    high = star_forming_gsmf(logm, 1.0) + quiescent_gsmf(logm, 1.0)
+    unanchored = star_forming_gsmf(logm, 1.0, anchored=False) + quiescent_gsmf(logm, 1.0, anchored=False)
+    np.testing.assert_allclose(high, unanchored)
