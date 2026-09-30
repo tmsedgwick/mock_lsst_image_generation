@@ -23,6 +23,7 @@ from .donor_selection import rest_frame_sed_checks
 from .environment_sampling import assign_clustered_positions, draw_web_positions
 from .gsmf_sampling import build_gsmf_sampling_tables, draw_gsmf_masses
 from .hubble_types import add_hubble_types
+from .photometry import REST_COLS
 from .rest_frame_sed_sampling import (RestFrameEmpiricalPDF, build_rest_frame_donor_table, project_to_observed_frame,
                                       sample_rest_frame_properties)
 from .sf_clump_generation import add_sf_clumps
@@ -77,7 +78,9 @@ def draw_physical_catalogue(cfg, phys, rng, grids, ssfr_pdf):
 
 def compute_observables(cat, pdf, cfg, phys, rng, grids):
     """Clone rest-frame SEDs and sizes, project to observed ugrizy, split into bulge + disc, and number the galaxies."""
-    rest = sample_rest_frame_properties(cat, pdf, rng)
+    rest = sample_rest_frame_properties(cat.assign(log1pz=np.log10(1.0 + cat["z"])), pdf, rng)
+    if cfg["donor_mass_light_scaling"]:  # keep the donor's mass-to-light ratio: scale its luminosity to the mock mass
+        rest[REST_COLS] = rest[REST_COLS].sub(2.5 * (rest["logM"] - rest["donor_logM"]), axis=0)
     obs = add_bulge_disc_components(project_to_observed_frame(rest, cfg, grids), cfg, phys, rng)
     obs.insert(0, "id", np.arange(len(obs)))
     return obs
@@ -137,7 +140,7 @@ def build_mock_catalogue(cosmos, cfg=None, phys=None):
     if high_edge.mean() > 0.1:
         print(f"WARNING: {high_edge.mean():.1%} of training galaxies need large SED extrapolation.")
         print("         Add UV/NIR COSMOS bands to OBS_BAND_ALIASES if available.")
-    pdf = RestFrameEmpiricalPDF(xcols=cfg["pdf_xcols"], k=cfg["empirical_k"],
+    pdf = RestFrameEmpiricalPDF(xcols=cfg["pdf_xcols"], xweights=cfg["pdf_xweights"], k=cfg["empirical_k"],
                                 clip_percentiles=cfg["empirical_clip_percentiles"], seed=cfg["seed"]).fit(donors)
     zsel = grids["z"] >= cfg["z_min"]
     print(f'Survey area: {grids["area_deg2"]:.4f} deg^2; V = {trapz(grids["dVdz"][zsel], grids["z"][zsel]):,.0f} Mpc^3')

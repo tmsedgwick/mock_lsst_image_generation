@@ -24,7 +24,9 @@ CONFIG: dict[str, Any] = dict(
     ssfr_pdf_z_min=0.0, ssfr_pdf_z_max=0.3, ssfr_split=-10.0, ssfr_pdf_k=160, ssfr_reference_z=0.15,
     ssfr_min=-15.5, ssfr_max=-6.5,
     # Empirical rest-frame PDF p(SED, Re, ellipticity | logM, logsSFR) built from COSMOS donors.
-    pdf_xcols=["logM", "logsSFR"], empirical_k=256, empirical_clip_percentiles=(0.5, 99.5),
+    pdf_xcols=["logM", "logsSFR"], pdf_xweights=None, empirical_k=256, empirical_clip_percentiles=(0.5, 99.5),
+    # Scale each cloned SED by 10^(logM - donor logM), keeping the donor's mass-to-light ratio and colours.
+    donor_mass_light_scaling=False,
     min_training_bands=4, allow_sed_extrapolation=True, warn_edge_distance=0.35, max_rest_edge_distance=0.55,
     # COSMOS donor quality cuts, restricted to bright, reliable HSC-r model magnitudes.
     cosmos_galaxies_only=True,  # LePhare galaxies only: no QSO (or star) donors

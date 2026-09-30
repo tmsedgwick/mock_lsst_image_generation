@@ -30,7 +30,7 @@ def build_rest_frame_donor_table(cosmos, cfg, grids=None):
             continue
         rest_abs, edge = observed_to_rest_abs_mags(obs_mags, obs_waves, z, grids, cfg)
         re_kpc = arcsec_to_kpc(row["Re_arcsec"], z, grids)
-        rows.append(dict(z_cosmos=z, logM=row["logM"], logSFR=row["logSFR"], logsSFR=row["logsSFR"],
+        rows.append(dict(z_cosmos=z, log1pz=np.log10(1.0 + z), logM=row["logM"], logSFR=row["logSFR"], logsSFR=row["logsSFR"],
                          Re_arcsec=row["Re_arcsec"], Re_kpc=re_kpc, ellipticity=row["ellipticity"],
                          rest_edge_distance=edge, n_obs_bands=int(np.isfinite(obs_mags).sum()),
                          logRe_kpc=np.log10(re_kpc) if re_kpc > 0 else np.nan, **dict(zip(REST_COLS, rest_abs))))
@@ -44,10 +44,12 @@ def build_rest_frame_donor_table(cosmos, cfg, grids=None):
 
 class RestFrameEmpiricalPDF:
     """p(rest SED, logRe_kpc, ellipticity | xcols): kernel-weighted draws among the k nearest donors in the
-    standardised xcols space (inputs clipped to the donor percentile range)."""
+    standardised xcols space (inputs clipped to the donor percentile range). xweights (default all 1) multiply each
+    standardised coordinate, so a larger weight makes donors match more closely in that quantity."""
 
-    def __init__(self, xcols=None, k=256, clip_percentiles=(0.5, 99.5), seed=42):
+    def __init__(self, xcols=None, k=256, clip_percentiles=(0.5, 99.5), seed=42, xweights=None):
         self.xcols = list(xcols) if xcols is not None else ["logM", "logsSFR"]
+        self.xweights = np.ones(len(self.xcols)) if xweights is None else np.asarray(xweights, float)
         self.k, self.clip_percentiles, self.seed = k, clip_percentiles, seed
 
     def fit(self, donors):
@@ -62,6 +64,7 @@ class RestFrameEmpiricalPDF:
         Xc = np.clip(X, self.xlo, self.xhi)
         self.xmed, self.xscale = np.nanmedian(Xc, axis=0), np.nanstd(Xc, axis=0)
         self.xscale[self.xscale == 0] = 1.0
+        self.xscale = self.xscale / self.xweights
         self.Xs = (Xc - self.xmed) / self.xscale
         self.tree = build_kd_tree(self.Xs)
         self.k = min(self.k, len(self.train))
@@ -85,6 +88,8 @@ class RestFrameEmpiricalPDF:
         y = self.train.iloc[picked][self.ycols].reset_index(drop=True)
         y["empirical_edge_distance"] = np.sqrt((((X - Xc) / self.xscale) ** 2).sum(axis=1))
         y["donor_index"] = picked
+        y["donor_logM"] = self.train["logM"].to_numpy(float)[picked]
+        y["donor_z"] = self.train["z_cosmos"].to_numpy(float)[picked]
         return y
 
 
