@@ -9,7 +9,7 @@ from mock_lsst_image_generation.hubble_types import (BROAD, add_hubble_types, br
                                                      draw_structure)
 from mock_lsst_image_generation.sf_clump_generation import follow_structure
 
-TYPES = {f"E{n}" for n in range(8)} | {"S0", "SB0", "Sa", "Sb", "Sc", "SBa", "SBb", "SBc", "Irr"}
+TYPES = {f"E{n}" for n in range(8)} | {"S0", "SB0", "Sa", "Sb", "Sc", "SBa", "SBb", "SBc", "Sm", "SBm", "Irr"}
 
 
 def test_probabilities_are_normalised_everywhere():
@@ -99,3 +99,13 @@ def test_clumps_crowd_onto_the_arms():
     r_any, phi_any = rng.gamma(2.0, rd, 4000), rng.uniform(0, 2 * np.pi, 4000)
     anywhere = structure_weight(record, r_any * np.cos(phi_any), r_any * np.sin(phi_any)).mean()
     assert on_arms > 1.3 * anywhere
+
+
+def test_dwarf_discs_are_magellanic_not_grand_design():
+    """Below DWARF_SPIRAL_MASS spirals lose their arms to irregular modes; above it they keep them; in between, both."""
+    types = np.array(["Sc", "SBc", "Sc", "Sb"], dtype=object)
+    s = draw_structure(types, np.random.default_rng(0), logM=np.array([8.0, 8.0, 9.0, 10.5]))
+    assert (s.loc[:1, "arm_strength"] == 0).all() and (s.loc[:1, "irregularity"] > 0).all()
+    assert s.loc[2, "arm_strength"] > 0 and s.loc[2, "irregularity"] > 0
+    assert s.loc[3, "arm_strength"] > 0 and s.loc[3, "irregularity"] == 0
+    assert s.loc[1, "barred"]

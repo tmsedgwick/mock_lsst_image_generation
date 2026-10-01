@@ -20,7 +20,7 @@ COSMOS2025_MAG_MAP = {
 COSMOS2025_MAG_ERR_MAP = {"g": "mag_err_model_hsc-g", "r": "mag_err_model_hsc-r", "i": "mag_err_model_hsc-i"}
 COSMOS2025_BASE_COLUMNS = [
     "id", "ra", "dec", "zfinal", "type", "mass_med", "mass_l68", "mass_u68", "sfr_med", "sfr_l68", "sfr_u68",
-    "ssfr_med", "ssfr_l68", "ssfr_u68", "radius_sersic", "axratio_sersic", "sersic", "fwhm",
+    "ssfr_med", "ssfr_l68", "ssfr_u68", "radius_sersic", "axratio_sersic", "sersic", "fwhm", "kron1_a",
     "flag_star", "flag_blend", "warn_flag", "flag_chandra",
 ]
 COSMOS2025_COLUMNS = list(dict.fromkeys([*COSMOS2025_BASE_COLUMNS, *COSMOS2025_MAG_MAP.values(),

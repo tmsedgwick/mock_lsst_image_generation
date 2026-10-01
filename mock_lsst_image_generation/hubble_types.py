@@ -102,6 +102,10 @@ SPIRAL_STRUCTURE = dict(a=SpiralStructure(pitch=(10, 2), strength=(0.55, 0.1), s
 BAR_RADIUS_H = 1.6  # arms start at the bar's end, in disc scale lengths; unbarred arms start at ARM_START_H
 ARM_START_H = 0.5
 IRREGULARITY = (0.5, 0.1)  # amplitude of an Irr's random low-order modes
+# Low-mass discs are Magellanic (Sm) rather than grand-design: between these log masses the spiral arms fade out and
+# irregular modes fade in (visual choice). Bars are kept, as measured (Erwin 2018); discs mostly faded are labelled
+# Sm / SBm.
+DWARF_SPIRAL_MASS = (8.5, 9.5)
 
 
 def schechter(logM, log_mstar, phi_star, alpha):
@@ -193,9 +197,17 @@ def draw_hubble_types(logM, z, passive, ellipticity, rng):
     return types
 
 
-def draw_structure(types, rng):
+def spiral_weight(logM):
+    """How much of a spiral's grand-design structure a disc of this mass keeps: 0 below DWARF_SPIRAL_MASS[0], 1 above
+    DWARF_SPIRAL_MASS[1]."""
+    lo, hi = DWARF_SPIRAL_MASS
+    return np.clip((np.asarray(logM, float) - lo) / (hi - lo), 0.0, 1.0)
+
+
+def draw_structure(types, rng, logM=None):
     """Rendering parameters for each galaxy's type: arm count, pitch (deg), strength, sharpness and phase (deg), the
-    radius where arms start (disc scale lengths), bar flag, irregularity amplitude and a seed for the Irr modes."""
+    radius where arms start (disc scale lengths), bar flag, irregularity amplitude and a seed for the Irr modes. With
+    logM, low-mass spirals trade their arms for irregular modes (see DWARF_SPIRAL_MASS)."""
     n = len(types)
     out = pd.DataFrame(dict(n_arms=0, arm_pitch_deg=20.0, arm_strength=0.0, arm_sharpness=1.0,
                             arm_phase_deg=rng.uniform(0, 360, n), arm_start_h=ARM_START_H,
@@ -210,17 +222,27 @@ def draw_structure(types, rng):
         out.loc[rows, "arm_sharpness"] = float(s.sharpness)
     irregular = np.flatnonzero(types == "Irr")
     out.loc[irregular, "irregularity"] = np.clip(rng.normal(*IRREGULARITY, len(irregular)), 0.1, 0.9)
+    spirals = np.flatnonzero(out["n_arms"].to_numpy() > 0)
+    patchiness = np.clip(rng.normal(*IRREGULARITY, len(spirals)), 0.1, 0.9)  # drawn even when unused: stable stream
+    if logM is not None:
+        w = spiral_weight(np.asarray(logM, float)[spirals])
+        out.loc[spirals, "arm_strength"] *= w
+        out.loc[spirals, "irregularity"] = (1 - w) * patchiness
+        out.loc[spirals[w == 0], "n_arms"] = 0
     return out
 
 
 def add_hubble_types(table, rng):
     """Catalogue table with hubble_type and its rendering structure columns added to every galaxy row (star rows get
-    none)."""
+    none). Spirals below the middle of DWARF_SPIRAL_MASS are labelled Sm / SBm."""
     galaxies = (table["type"] != "star").to_numpy()
     gal = table.loc[galaxies]
     types = draw_hubble_types(gal["logM"].to_numpy(float), gal["z"].to_numpy(float),
                               (gal["type"] == "passive").to_numpy(), gal["ellipticity_total"].to_numpy(float), rng)
-    structure = draw_structure(types, rng).set_index(gal.index)
+    logM = gal["logM"].to_numpy(float)
+    structure = draw_structure(types, rng, logM).set_index(gal.index)
+    magellanic = np.isin(types, ["Sa", "Sb", "Sc", "SBa", "SBb", "SBc"]) & (spiral_weight(logM) < 0.5)
+    types[magellanic] = [t[:-1] + "m" for t in types[magellanic]]
     out = table.copy()
     out.loc[galaxies, "hubble_type"] = types
     for column in structure:

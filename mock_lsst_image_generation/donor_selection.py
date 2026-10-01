@@ -105,6 +105,12 @@ def apply_donor_quality_cuts(c, obs_cols, cfg):
             raise KeyError("COSMOS training r-band magnitude-error cut requested, but obs_err_r is unavailable.")
         checks.append((f"observed r mag error < {r_err_max}",
                        within(numeric(c, "obs_err_r"), None, r_err_max, inclusive=False)))
+    max_re_over_kron = cfg["cosmos_max_sersic_re_over_kron"]
+    if max_re_over_kron is not None:
+        if "kron1_a" not in c.columns:
+            raise KeyError("cosmos_max_sersic_re_over_kron needs the COSMOS2025 Kron semi-major axis column kron1_a.")
+        re_over_kron = numeric(c, "Re_arcsec") / numeric(c, "kron1_a")
+        checks.append((f"Sersic Re <= {max_re_over_kron} x Kron semi-major axis", re_over_kron <= max_re_over_kron))
     ell_min, ell_max = cfg["cosmos_training_ellipticity_min"], cfg["cosmos_training_ellipticity_max"]
     if ell_min is not None or ell_max is not None:
         checks.append((f"{ell_min} < ellipticity < {ell_max}",

@@ -31,6 +31,10 @@ CONFIG: dict[str, Any] = dict(
     min_training_bands=4, allow_sed_extrapolation=True, warn_edge_distance=0.35, max_rest_edge_distance=0.55,
     # COSMOS donor quality cuts, restricted to bright, reliable HSC-r model magnitudes.
     cosmos_galaxies_only=True,  # LePhare galaxies only: no QSO (or star) donors
+    # Trust a COSMOS Sersic size only inside the Kron aperture (Re <= kron1_a). Good fits have Re ~ 0.5 x Kron; failed
+    # fits of faint sources run their wings into the noise and reach 2-3 x Kron (e.g. 10-20 kpc dwarfs). The Re / Kron
+    # distribution is bimodal with its dip at 1-1.3, so the cut needs no size-mass relation.
+    cosmos_max_sersic_re_over_kron=1.0,
     cosmos_training_z_max=6.0, cosmos_training_logm_min=7.0, cosmos_training_logm_max=12.0,
     cosmos_training_logssfr_min=-15.5, cosmos_training_logssfr_max=-7.0,
     cosmos_training_r_mag_min=20.0, cosmos_training_r_mag_max=24.0, cosmos_training_r_magerr_max=0.2,
