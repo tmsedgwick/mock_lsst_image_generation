@@ -19,15 +19,21 @@ CONFIG: dict[str, Any] = dict(
     # Continuous COSMOS-style GSMF sampling. Redshifts come from clustered light-cone sites, which are thinned by the
     # total evolving number density.
     gsmf_n_z=700, gsmf_n_m=900, gsmf_z_eval_min=0.2, gsmf_z_eval_max=5.5, gsmf_poisson_counts=True,
+    gsmf_local_anchor_z=(0.35, 0.6),  # GAMA-anchored below the first z, fading out by the second (None = off)
     gsmf_position_oversample=4,
     # Low-z COSMOS2025 empirical sSFR PDFs, split into SF/passive samples and evolved to each galaxy's redshift.
     ssfr_pdf_z_min=0.0, ssfr_pdf_z_max=0.3, ssfr_split=-10.0, ssfr_pdf_k=160, ssfr_reference_z=0.15,
     ssfr_min=-15.5, ssfr_max=-6.5,
     # Empirical rest-frame PDF p(SED, Re, ellipticity | logM, logsSFR) built from COSMOS donors.
-    pdf_xcols=["logM", "logsSFR"], empirical_k=256, empirical_clip_percentiles=(0.5, 99.5),
+    pdf_xcols=["logM", "logsSFR"], pdf_xweights=None, empirical_k=256, empirical_clip_percentiles=(0.5, 99.5),
+    # Scale each cloned SED by 10^(logM - donor logM), keeping the donor's mass-to-light ratio and colours.
+    donor_mass_light_scaling=False,
     min_training_bands=4, allow_sed_extrapolation=True, warn_edge_distance=0.35, max_rest_edge_distance=0.55,
     # COSMOS donor quality cuts, restricted to bright, reliable HSC-r model magnitudes.
     cosmos_galaxies_only=True,  # LePhare galaxies only: no QSO (or star) donors
+    # Optional size-quality cut, off: keep only donors whose COSMOS Sersic Re lies inside the Kron aperture
+    # (Re <= value x kron1_a). Off by default because it also removes most of the extended donors.
+    cosmos_max_sersic_re_over_kron=None,
     cosmos_training_z_max=6.0, cosmos_training_logm_min=7.0, cosmos_training_logm_max=12.0,
     cosmos_training_logssfr_min=-15.5, cosmos_training_logssfr_max=-7.0,
     cosmos_training_r_mag_min=20.0, cosmos_training_r_mag_max=24.0, cosmos_training_r_magerr_max=0.2,
@@ -88,6 +94,21 @@ CONFIG: dict[str, Any] = dict(
     # Hubble types drawn from published mass functions, with the arm / bar / clump parameters they imply
     # (hubble_types.py).
     hubble_types=True,
+    # Extended dwarf irregulars, UDGs and almost-dark galaxies (lsb_galaxies.py), added on top of the realistic
+    # population in deliberately generous numbers (per deg^2) so a detector sees enough of them; each population is
+    # drawn within its observed ranges of redshift, Re (kpc) and central g-band surface brightness mu0_g.
+    # A few BCG-like core-Sersic sources (BCG core + extended envelope; bcg_sources.py, ICL_DoubleSersic_Injection.ipynb)
+    # per frame: Re (arcsec) log-uniform and mean r-band SB within the half-light area mu_r uniform in these ranges.
+    bcgs=True, bcg_per_deg2=40, bcg_re_arcsec=(5.0, 30.0), bcg_mu_r=(20.0, 25.0),
+    lsb_galaxies=True,
+    lsb_populations=dict(
+        extended_dirr=dict(per_deg2=800, z=(0.005, 0.06), re_kpc=(1.0, 3.0), mu0_g=(22.5, 24.0), quiescent_frac=0.0,
+                           donors="star_forming", irregularity=(0.5, 0.1)),
+        udg=dict(per_deg2=800, z=(0.02, 0.06), re_kpc=(1.5, 5.0), mu0_g=(24.0, 27.0), quiescent_frac=0.25,
+                 donors="star_forming", irregularity=(0.5, 0.1)),
+        almost_dark=dict(per_deg2=100, z=(0.003, 0.03), re_kpc=(1.5, 3.5), mu0_g=(26.0, 28.0), quiescent_frac=0.0,
+                         donors="bluest", irregularity=(0.8, 0.05)),
+    ),
 )
 
 # Stars, calibrated on the stars of a real LSSTCam deep coadd (StarSimulation.ipynb). Only g, r and i were calibrated:

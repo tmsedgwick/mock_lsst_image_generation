@@ -5,6 +5,10 @@ parameters: each parameter is a polynomial in z (np.polyval order, highest power
 Phi(logM, z) in Mpc^-3 dex^-1 calibrated over 0.2 < z < 5.5 (evaluation redshifts are clamped to that range).
   * star-forming: double Schechter whose second component tapers off above z ~ 2.6;
   * quiescent: a shallow main component at all z plus a steep low-mass upturn that tapers off above z ~ 1.5.
+At low redshift both are anchored to the local GAMA mass function (Baldry et al. 2012, MNRAS 421, 621: double
+Schechter, z < 0.06, fitted over 10^8-10^11.5 Msun, H0 = 70; extrapolated below 10^8 with its low-mass slope): they are
+multiplied by (Phi_GAMA / Phi_model(z = gsmf_z_eval_min))^w(z), with w = 1 up to gsmf_local_anchor_z[0] falling linearly
+to 0 at gsmf_local_anchor_z[1], so the total matches GAMA locally and the star-forming fraction is unchanged.
 """
 
 from typing import TypedDict
@@ -25,6 +29,7 @@ Q_LOGPHI_MAIN = [0.067958, -0.528446, 0.515016, -3.109924]
 Q_LOGPHI_UP = [-0.28553, -5.59659]
 Q_ALPHA_UP = -2.0
 LN10 = np.log(10.0)
+BALDRY12 = dict(log_mstar=10.66, phi1=3.96e-3, alpha1=-0.35, phi2=0.79e-3, alpha2=-1.47)  # GAMA, Mpc^-3, H0 = 70
 
 
 def clamp_gsmf_redshift(z, cfg):
@@ -47,24 +52,44 @@ def quiescent_upturn_taper(z):
     return 0.5 * (1.0 - np.tanh((np.asarray(z, float) - 1.5) / 0.15))
 
 
-def star_forming_gsmf(logM, z, cfg=CONFIG, second_component=True):
+def gama_gsmf(logM):
+    """Local (z < 0.06) GAMA stellar mass function of Baldry et al. 2012, Phi(logM) in Mpc^-3 dex^-1."""
+    p = BALDRY12
+    m = 10.0 ** (np.asarray(logM, float) - p["log_mstar"])
+    return LN10 * np.exp(-m) * (p["phi1"] * m ** (1.0 + p["alpha1"]) + p["phi2"] * m ** (1.0 + p["alpha2"]))
+
+
+def local_anchor(logM, z, cfg):
+    """Factor bringing the model total to GAMA at low z (see the module docstring); 1 when anchoring is off."""
+    if cfg.get("gsmf_local_anchor_z") is None:
+        return np.ones(np.broadcast(np.asarray(logM), np.asarray(z)).shape)
+    z_full, z_off = cfg["gsmf_local_anchor_z"]
+    w = np.clip((z_off - np.asarray(z, float)) / (z_off - z_full), 0.0, 1.0)
+    z_ref = cfg["gsmf_z_eval_min"]
+    model = star_forming_gsmf(logM, z_ref, cfg, anchored=False) + quiescent_gsmf(logM, z_ref, cfg, anchored=False)
+    return (gama_gsmf(logM) / model) ** w
+
+
+def star_forming_gsmf(logM, z, cfg=CONFIG, second_component=True, anchored=True):
     """Star-forming Phi(logM, z) in Mpc^-3 dex^-1."""
+    anchor = local_anchor(logM, z, cfg) if anchored else 1.0
     z = clamp_gsmf_redshift(z, cfg)
     m = 10.0 ** (np.asarray(logM, float) - np.polyval(SF_LOGMSTAR, z))
     phi = 10.0 ** np.polyval(SF_LOGPHI1, z) * m ** (1.0 + np.polyval(SF_ALPHA1, z))
     if second_component:
         phi = phi + 10.0 ** np.polyval(SF_LOGPHI2, z) * sf_second_component_taper(z) * m ** (1.0 + SF_ALPHA2)
-    return LN10 * np.exp(-m) * phi
+    return LN10 * np.exp(-m) * phi * anchor
 
 
-def quiescent_gsmf(logM, z, cfg=CONFIG, upturn=True):
+def quiescent_gsmf(logM, z, cfg=CONFIG, upturn=True, anchored=True):
     """Quiescent Phi(logM, z) in Mpc^-3 dex^-1."""
+    anchor = local_anchor(logM, z, cfg) if anchored else 1.0
     z = clamp_gsmf_redshift(z, cfg)
     m = 10.0 ** (np.asarray(logM, float) - np.polyval(Q_LOGMSTAR, z))
     phi = 10.0 ** np.polyval(Q_LOGPHI_MAIN, z) * m ** (1.0 + np.polyval(Q_ALPHA_MAIN, z))
     if upturn:
         phi = phi + 10.0 ** np.polyval(Q_LOGPHI_UP, z) * quiescent_upturn_taper(z) * m ** (1.0 + Q_ALPHA_UP)
-    return LN10 * np.exp(-m) * phi
+    return LN10 * np.exp(-m) * phi * anchor
 
 
 def mass_cdfs_from_gsmf(phi, m_grid):
@@ -101,8 +126,8 @@ def build_gsmf_sampling_tables(cfg, grids) -> GSMFTables:
     z_grid = np.linspace(max(cfg["z_min"], 1e-4), cfg["z_max"], cfg["gsmf_n_z"])
     m_grid = np.linspace(cfg["logm_min"], cfg["logm_max"], cfg["gsmf_n_m"])
     z_eval = clamp_gsmf_redshift(z_grid, cfg)
-    cdf_sf, n_sf = mass_cdfs_from_gsmf(star_forming_gsmf(m_grid[None, :], z_eval[:, None], cfg), m_grid)
-    cdf_q, n_q = mass_cdfs_from_gsmf(quiescent_gsmf(m_grid[None, :], z_eval[:, None], cfg), m_grid)
+    cdf_sf, n_sf = mass_cdfs_from_gsmf(star_forming_gsmf(m_grid[None, :], z_grid[:, None], cfg), m_grid)
+    cdf_q, n_q = mass_cdfs_from_gsmf(quiescent_gsmf(m_grid[None, :], z_grid[:, None], cfg), m_grid)
     n_total = n_sf + n_q
     n_expected = trapz(n_total * np.interp(z_grid, grids["z"], grids["dVdz"]), z_grid)
     p_sf = np.divide(n_sf, n_total, out=np.zeros_like(n_total), where=n_total > 0)

@@ -16,6 +16,7 @@ from typing import NamedTuple
 import numpy as np
 import pandas as pd
 
+from .bcg_sources import add_bcgs
 from .bulge_disc_decomposition import add_bulge_disc_components, draw_bulge_to_total
 from .config import CATALOGUE_STEM, CONFIG, N_CATALOGUES, PHYS, catalogue_splits
 from .cosmology import build_cosmology_grids, trapz
@@ -23,6 +24,8 @@ from .donor_selection import rest_frame_sed_checks
 from .environment_sampling import assign_clustered_positions, draw_web_positions
 from .gsmf_sampling import build_gsmf_sampling_tables, draw_gsmf_masses
 from .hubble_types import add_hubble_types
+from .lsb_galaxies import add_lsb_galaxies
+from .photometry import REST_COLS
 from .rest_frame_sed_sampling import (RestFrameEmpiricalPDF, build_rest_frame_donor_table, project_to_observed_frame,
                                       sample_rest_frame_properties)
 from .sf_clump_generation import add_sf_clumps
@@ -77,7 +80,9 @@ def draw_physical_catalogue(cfg, phys, rng, grids, ssfr_pdf):
 
 def compute_observables(cat, pdf, cfg, phys, rng, grids):
     """Clone rest-frame SEDs and sizes, project to observed ugrizy, split into bulge + disc, and number the galaxies."""
-    rest = sample_rest_frame_properties(cat, pdf, rng)
+    rest = sample_rest_frame_properties(cat.assign(log1pz=np.log10(1.0 + cat["z"])), pdf, rng)
+    if cfg["donor_mass_light_scaling"]:  # keep the donor's mass-to-light ratio: scale its luminosity to the mock mass
+        rest[REST_COLS] = rest[REST_COLS].sub(2.5 * (rest["logM"] - rest["donor_logM"]), axis=0)
     obs = add_bulge_disc_components(project_to_observed_frame(rest, cfg, grids), cfg, phys, rng)
     obs.insert(0, "id", np.arange(len(obs)))
     return obs
@@ -137,7 +142,7 @@ def build_mock_catalogue(cosmos, cfg=None, phys=None):
     if high_edge.mean() > 0.1:
         print(f"WARNING: {high_edge.mean():.1%} of training galaxies need large SED extrapolation.")
         print("         Add UV/NIR COSMOS bands to OBS_BAND_ALIASES if available.")
-    pdf = RestFrameEmpiricalPDF(xcols=cfg["pdf_xcols"], k=cfg["empirical_k"],
+    pdf = RestFrameEmpiricalPDF(xcols=cfg["pdf_xcols"], xweights=cfg["pdf_xweights"], k=cfg["empirical_k"],
                                 clip_percentiles=cfg["empirical_clip_percentiles"], seed=cfg["seed"]).fit(donors)
     zsel = grids["z"] >= cfg["z_min"]
     print(f'Survey area: {grids["area_deg2"]:.4f} deg^2; V = {trapz(grids["dVdz"][zsel], grids["z"][zsel]):,.0f} Mpc^3')
@@ -151,6 +156,10 @@ def build_mock_catalogue(cosmos, cfg=None, phys=None):
     if cfg["hubble_types"]:  # before the clumps, which follow the arms; own random stream, so nothing else changes
         mock = add_hubble_types(mock, np.random.default_rng([cfg["seed"], 2]))
     mock, tidal_pairs = select_tidal_pairs(mock, cfg, rng) if cfg["tidal_streams"] else (mock, pd.DataFrame())
+    if cfg["lsb_galaxies"]:  # after the tidal pairs, before the clumps (which they get too); own random stream
+        mock = add_lsb_galaxies(mock, donors, cfg, phys, grids, np.random.default_rng([cfg["seed"], 4]))
+    if cfg["bcgs"]:  # own random stream
+        mock = add_bcgs(mock, cfg, np.random.default_rng([cfg["seed"], 5]))
     clumps, tidal_blobs = pd.DataFrame(), pd.DataFrame()
     if cfg["sf_clumps"]:
         print("Adding SF clumps...", flush=True)
