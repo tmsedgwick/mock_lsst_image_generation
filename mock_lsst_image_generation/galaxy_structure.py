@@ -81,8 +81,9 @@ def structure_weight(record, u, v):
 
 
 def structure_images(record, x_offsets, y_offsets):
-    """(bar, arms, depth) for a grid of sky offsets (arcsec) from the galaxy centre: the bar and arm / clump images
-    per unit disc flux, and the deepest fraction of the barred disc's light the arms remove anywhere."""
+    """(bar, arms, depth, disc) for a grid of sky offsets (arcsec) from the galaxy centre: the bar and arm / clump
+    images per unit disc flux, the deepest fraction of the barred disc's light the arms remove anywhere, and the
+    barred disc itself (unit sum)."""
     h = float(record["re_disc_arcsec"]) / SERSIC_B1
     pa = np.radians(float(record["pa_deg"]))
     x, y = np.meshgrid(x_offsets, y_offsets)
@@ -99,7 +100,7 @@ def structure_images(record, x_offsets, y_offsets):
         smooth, barred, shaped = smooth + weight * layer[0], barred + weight * layer[1], shaped + weight * layer[2]
     arms = shaped * barred.sum() / shaped.sum() - barred  # rescaled so arms / clumps only move light
     depth = float(np.max(-arms / np.maximum(barred, 1e-30 * barred.max())))
-    return barred / barred.sum() - smooth / smooth.sum(), arms / barred.sum(), depth
+    return barred / barred.sum() - smooth / smooth.sum(), arms / barred.sum(), depth, barred / barred.sum()
 
 
 def has_structure(record, min_re_arcsec):
@@ -125,15 +126,20 @@ def add_structure(cube, xmin, ymin, record, bands, psf_fwhm, pixscale):
         return
     sub = (np.arange(OVERSAMPLE) + 0.5) / OVERSAMPLE - 0.5
     offsets = lambda start, stop, centre: ((np.arange(start, stop)[:, None] + sub).ravel() - centre) * pixscale
-    bar, arms, depth = structure_images(record, offsets(xmin + x0, xmin + x1, record["x_img"]),
-                                        offsets(ymin + y0, ymin + y1, record["y_img"]))
+    bar, arms, depth, disc = structure_images(record, offsets(xmin + x0, xmin + x1, record["x_img"]),
+                                              offsets(ymin + y0, ymin + y1, record["y_img"]))
     shape = (y1 - y0, OVERSAMPLE, x1 - x0, OVERSAMPLE)
-    bar, arms = bar.reshape(shape).sum(axis=(1, 3)), arms.reshape(shape).sum(axis=(1, 3))
-    boost_cap = 0.95 / max(depth, 1e-3)  # bluer arms must not take more than the light between them
+    bar, arms, disc = (a.reshape(shape).sum(axis=(1, 3)) for a in (bar, arms, disc))
+    # Arms are bluer (ARM_COLOUR_BOOST) than the rest of the disc. The extra (or missing) light of each band's arms is
+    # balanced across the whole disc in proportion to its light, not taken from between the arms, so the inter-arm
+    # disc keeps the disc's colour instead of turning into a separate red glow.
+    arm_light = np.maximum(arms, 0.0)
+    boost_room = 0.9 * (1 - depth) / max(arm_light.sum(), 1e-3)  # the removal must leave inter-arm light positive
     for i, band in enumerate(bands):
         flux = float(record.get(f"flux_{band}_disc", 0.0))
         if not (np.isfinite(flux) and flux > 0):
             continue
         sigma = psf_fwhm[band] / 2.355 / pixscale
-        image = flux * (bar + min(ARM_COLOUR_BOOST.get(band, 1.0), boost_cap) * arms)
+        extra = min(ARM_COLOUR_BOOST.get(band, 1.0) - 1.0, boost_room)
+        image = flux * (bar + arms + extra * (arm_light - arm_light.sum() * disc))
         cube[i, y0:y1, x0:x1] += gaussian_filter(image, sigma, mode="constant").astype(cube.dtype)

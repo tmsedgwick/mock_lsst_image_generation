@@ -65,7 +65,7 @@ def render(record, **kwargs):
 def test_structure_moves_disc_light_without_changing_its_flux():
     offsets = np.arange(-60, 61) * 0.2
     for hubble_type in ["SBb", "Sc", "Irr"]:
-        bar, arms, depth = structure_images(galaxy_record(hubble_type), offsets, offsets)
+        bar, arms, depth, _ = structure_images(galaxy_record(hubble_type), offsets, offsets)
         assert 0 < depth <= 1
         assert abs(bar.sum()) < 1e-6 and abs(arms.sum()) < 1e-6
         assert np.abs(bar).max() + np.abs(arms).max() > 1e-4
