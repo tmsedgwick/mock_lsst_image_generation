@@ -179,6 +179,70 @@ def field_sites(n, chi_lo, chi_hi, cfg, rng):
                       np.full(n, np.nan), np.full(n, np.nan))
 
 
+def distance_outside_lightcone(xyz, cfg, chi_lo, chi_hi):
+    """Distance (Mpc) of each point from the light cone between chi_lo and chi_hi (0 inside)."""
+    chi = xyz[:, 2]
+    half = 0.5 * field_width_rad(cfg) * np.maximum(chi, 1e-6)
+    dx = np.maximum(np.abs(xyz[:, 0]) - half, 0.0)
+    dy = np.maximum(np.abs(xyz[:, 1]) - half, 0.0)
+    dchi = np.maximum(np.maximum(chi_lo - chi, chi - chi_hi), 0.0)
+    return np.sqrt(dx**2 + dy**2 + dchi**2)
+
+
+def fill_cone_structure_sites(nodes, richness, edges, n_cluster, n_filament, cfg, rng, chi_lo, chi_hi):
+    """Exactly n_cluster cluster and n_filament filament sites inside the light cone.
+
+    Why: the web fills a volume padded web_parent_pad_mpc around the cone (~50x the cone's volume for a 0.08 deg^2
+    frame), so drawing structure sites from the whole web and clipping them to the cone kept only 1-3 % of them,
+    while field sites are drawn inside the cone directly. The cone then held ~97 % field sites and the mock was nearly
+    unclustered. Here sites are drawn only around nodes, and along filaments, that come within web_cone_reach_mpc of
+    the cone, in batches until each type reaches its design share inside the cone. The web itself stays global.
+    """
+    reach = cfg["web_cone_reach_mpc"]
+    parts = []
+    near_nodes = np.where(distance_outside_lightcone(nodes, cfg, chi_lo, chi_hi) < reach)[0]
+    if len(near_nodes) and n_cluster > 0:
+        p = richness[near_nodes] / richness[near_nodes].sum()
+        got = 0
+        for _ in range(200):
+            n = max(1000, 2 * (n_cluster - got))
+            ci = near_nodes[rng.choice(len(near_nodes), n, p=p)]
+            dirs = rng.normal(size=(n, 3))
+            dirs /= np.linalg.norm(dirs, axis=1)[:, None]
+            core = rng.random(n) < cfg["web_core_frac"]
+            rad = np.where(core, rng.gamma(1.2, 0.35, n), rng.gamma(1.6, cfg["web_r_cluster"] / 2.2, n))
+            xyz = nodes[ci] + rad[:, None] * dirs
+            score = np.where(core, 4.0, 3.0) + 0.5 * np.log10(np.maximum(richness[ci] * len(nodes), 1e-6)) - 0.04 * rad
+            keep = np.where(inside_lightcone(xyz, cfg, chi_lo, chi_hi))[0][:n_cluster - got]
+            parts.append(site_table(xyz[keep], np.where(core, "cluster_core", "cluster_outskirts")[keep], score[keep],
+                                    ci[keep], np.full(len(keep), -1, int), rad[keep], rad[keep]))
+            got += len(keep)
+            if got >= n_cluster:
+                break
+    if len(edges) and n_filament > 0:
+        e = edges[:, :2].astype(int)
+        t = np.linspace(0.0, 1.0, 17)[None, :, None]
+        along = nodes[e[:, 0]][:, None, :] * (1 - t) + nodes[e[:, 1]][:, None, :] * t
+        dist = distance_outside_lightcone(along.reshape(-1, 3), cfg, chi_lo, chi_hi).reshape(len(e), -1)
+        near_edges = np.where(dist.min(axis=1) < reach)[0]
+        got = 0
+        for _ in range(200):
+            if not len(near_edges):
+                break
+            n = max(1000, 2 * (n_filament - got))
+            xyz, eid, dist_fil, dist_node = sample_filament_points(nodes, edges[near_edges], n, rng,
+                                                                   cfg["web_sig_filament"])
+            score = 2.0 - 0.15 * dist_fil - 0.01 * dist_node
+            keep = np.where(inside_lightcone(xyz, cfg, chi_lo, chi_hi))[0][:n_filament - got]
+            parts.append(site_table(xyz[keep], np.repeat("filament", len(keep)), score[keep],
+                                    np.full(len(keep), -1, int), near_edges[eid[keep]], dist_node[keep],
+                                    dist_fil[keep]))
+            got += len(keep)
+            if got >= n_filament:
+                break
+    return parts
+
+
 def generate_web_sites(n_gal, chi_lo, chi_hi, cfg, rng):
     """Generate the web between chi_lo and chi_hi and at least n_gal * web_candidate_oversample candidate sites.
 
@@ -196,7 +260,14 @@ def generate_web_sites(n_gal, chi_lo, chi_hi, cfg, rng):
     target = max(n_gal, int(n_gal * cfg["web_candidate_oversample"]))
     all_sites: list[pd.DataFrame] = []
     n_try = max(5000, target)
-    for attempt in range(8):
+    if cfg["web_sites_fill_cone"]:
+        n_cluster, n_filament = int(n_try * cfg["web_f_cluster"]), int(n_try * cfg["web_f_filament"])
+        centres = node_centre_sites(nodes, richness, cfg, chi_lo, chi_hi)
+        all_sites = ([centres] if centres is not None else []) + fill_cone_structure_sites(
+            nodes, richness, edges, n_cluster, n_filament, cfg, rng, chi_lo, chi_hi)
+        n_structure = sum(len(part) for part in all_sites)
+        all_sites.append(field_sites(max(n_try - n_structure, 0), chi_lo, chi_hi, cfg, rng))
+    for attempt in range(0 if cfg["web_sites_fill_cone"] else 8):
         # NB: sites from earlier attempts are kept, so node-centre sites repeat after a retry.
         n_cluster, n_filament = int(n_try * cfg["web_f_cluster"]), int(n_try * cfg["web_f_filament"])
         parts = [node_centre_sites(nodes, richness, cfg, chi_lo, chi_hi),
@@ -210,7 +281,7 @@ def generate_web_sites(n_gal, chi_lo, chi_hi, cfg, rng):
         n_try *= 2
         print(f"Only {n_sites:,} candidate sites after attempt {attempt + 1}; increasing to {n_try:,}")
 
-    sites = pd.concat(all_sites, ignore_index=True)
+    sites = pd.concat([part for part in all_sites if len(part)], ignore_index=True)
     if len(sites) > target:
         w = np.exp(cfg["web_site_keep_bias"] * sites["web_density_score"].to_numpy(float))
         sites = sites.iloc[rng.choice(len(sites), target, replace=False, p=w / w.sum())].reset_index(drop=True)
