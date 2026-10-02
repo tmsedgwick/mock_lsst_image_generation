@@ -21,8 +21,8 @@ from mock_lsst_image_generation.utils import resolved_mask
 # last few decimal places, which can flip galaxies across cuts. Clump counts are tested against their distribution
 # separately because changed hosts and rejection sampling can shift the subsequent random draws.
 REFERENCE_COUNTS = dict(galaxies=4183, tidal_pairs=1, tidal_blobs=162, donors=18476)
-REFERENCE_SUMS = dict(z=9249.33071063945, logM=33419.45976027333, mag_r_total=116806.07127182753,
-                      re_total_arcsec=1224.8041668612232)
+REFERENCE_SUMS = dict(z=9249.345128253974, logM=33419.499834007416, mag_r_total=116808.59141511179,
+                      re_total_arcsec=1208.3088186243863)
 COUNT_TOLERANCE, SUM_TOLERANCE = 0.01, 0.01
 
 

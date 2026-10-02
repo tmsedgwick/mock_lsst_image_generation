@@ -101,7 +101,7 @@ CONFIG: dict[str, Any] = dict(
     lsb_populations=dict(
         extended_dirr=dict(per_deg2=800, z=(0.005, 0.06), re_kpc=(1.0, 3.0), mu0_g=(22.5, 24.0), quiescent_frac=0.0,
                            donors="star_forming", irregularity=(0.5, 0.1)),
-        udg=dict(per_deg2=800, z=(0.005, 0.06), re_kpc=(1.5, 5.0), mu0_g=(24.0, 27.0), quiescent_frac=0.25,
+        udg=dict(per_deg2=800, z=(0.02, 0.06), re_kpc=(1.5, 5.0), mu0_g=(24.0, 27.0), quiescent_frac=0.25,
                  donors="star_forming", irregularity=(0.5, 0.1)),
         almost_dark=dict(per_deg2=100, z=(0.003, 0.03), re_kpc=(1.5, 3.5), mu0_g=(26.0, 28.0), quiescent_frac=0.0,
                          donors="bluest", irregularity=(0.8, 0.05)),
