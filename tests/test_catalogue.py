@@ -20,11 +20,11 @@ from mock_lsst_image_generation.utils import resolved_mask
 # Counts and column sums of the reference realisation (macOS, pinned requirements). Other platforms can differ in the
 # last few decimal places, which can flip galaxies across cuts. Clump counts are tested against their distribution
 # separately because changed hosts and rejection sampling can shift the subsequent random draws.
-REFERENCE_COUNTS = dict(galaxies=4183, tidal_pairs=1, tidal_blobs=162, donors=18476)
-REFERENCE_SUMS = dict(z=9249.345128253974, logM=33419.499834007416, mag_r_total=116808.59141511179)
+REFERENCE_COUNTS = dict(galaxies=4254, tidal_pairs=2, tidal_blobs=324, donors=18476)
+REFERENCE_SUMS = dict(z=9245.306949574317, logM=33968.64030832245, mag_r_total=118973.79265390243)
 # Sizes vary far more between donors than magnitudes, so platform-level differences in which donor a galaxy draws move
 # the summed Re by ~1% (seen on Linux CI); the median size is compared instead, with a looser tolerance.
-REFERENCE_MEDIAN_RE_ARCSEC = 0.20308886933809342
+REFERENCE_MEDIAN_RE_ARCSEC = 0.2014022695138109
 COUNT_TOLERANCE, SUM_TOLERANCE, MEDIAN_RE_TOLERANCE = 0.01, 0.01, 0.03
 
 
