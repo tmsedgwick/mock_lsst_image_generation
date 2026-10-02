@@ -105,7 +105,8 @@ def test_dwarf_discs_are_magellanic_not_grand_design():
     """Below DWARF_SPIRAL_MASS spirals lose their arms to irregular modes; above it they keep them; in between, both."""
     types = np.array(["Sc", "SBc", "Sc", "Sb"], dtype=object)
     s = draw_structure(types, np.random.default_rng(0), logM=np.array([8.0, 8.0, 9.0, 10.5]))
-    assert (s.loc[:1, "arm_strength"] == 0).all() and (s.loc[:1, "irregularity"] > 0).all()
-    assert s.loc[2, "arm_strength"] > 0 and s.loc[2, "irregularity"] > 0
-    assert s.loc[3, "arm_strength"] > 0 and s.loc[3, "irregularity"] == 0
-    assert s.loc[1, "barred"]
+    strength, irregularity = s["arm_strength"].to_numpy(float), s["irregularity"].to_numpy(float)
+    assert (strength[:2] == 0).all() and (irregularity[:2] > 0).all()
+    assert strength[2] > 0 and irregularity[2] > 0
+    assert strength[3] > 0 and irregularity[3] == 0
+    assert bool(s["barred"].to_numpy()[1])
