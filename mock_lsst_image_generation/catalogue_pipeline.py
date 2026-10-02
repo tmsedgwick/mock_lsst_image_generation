@@ -16,6 +16,7 @@ from typing import NamedTuple
 import numpy as np
 import pandas as pd
 
+from .bcg_sources import add_bcgs
 from .bulge_disc_decomposition import add_bulge_disc_components, draw_bulge_to_total
 from .config import CATALOGUE_STEM, CONFIG, N_CATALOGUES, PHYS, catalogue_splits
 from .cosmology import build_cosmology_grids, trapz
@@ -157,6 +158,8 @@ def build_mock_catalogue(cosmos, cfg=None, phys=None):
     mock, tidal_pairs = select_tidal_pairs(mock, cfg, rng) if cfg["tidal_streams"] else (mock, pd.DataFrame())
     if cfg["lsb_galaxies"]:  # after the tidal pairs, before the clumps (which they get too); own random stream
         mock = add_lsb_galaxies(mock, donors, cfg, phys, grids, np.random.default_rng([cfg["seed"], 4]))
+    if cfg["bcgs"]:  # own random stream
+        mock = add_bcgs(mock, cfg, np.random.default_rng([cfg["seed"], 5]))
     clumps, tidal_blobs = pd.DataFrame(), pd.DataFrame()
     if cfg["sf_clumps"]:
         print("Adding SF clumps...", flush=True)

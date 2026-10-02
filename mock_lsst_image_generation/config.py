@@ -97,6 +97,9 @@ CONFIG: dict[str, Any] = dict(
     # Extended dwarf irregulars, UDGs and almost-dark galaxies (lsb_galaxies.py), added on top of the realistic
     # population in deliberately generous numbers (per deg^2) so a detector sees enough of them; each population is
     # drawn within its observed ranges of redshift, Re (kpc) and central g-band surface brightness mu0_g.
+    # A few BCG-like core-Sersic sources (BCG core + extended envelope; bcg_sources.py, ICL_DoubleSersic_Injection.ipynb)
+    # per frame: Re (arcsec) log-uniform and mean r-band SB within the half-light area mu_r uniform in these ranges.
+    bcgs=True, bcg_per_deg2=40, bcg_re_arcsec=(5.0, 30.0), bcg_mu_r=(20.0, 25.0),
     lsb_galaxies=True,
     lsb_populations=dict(
         extended_dirr=dict(per_deg2=800, z=(0.005, 0.06), re_kpc=(1.0, 3.0), mu0_g=(22.5, 24.0), quiescent_frac=0.0,

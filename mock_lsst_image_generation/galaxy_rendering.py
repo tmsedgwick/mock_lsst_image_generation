@@ -15,6 +15,7 @@ import galsim
 import numpy as np
 from tqdm import tqdm
 
+from .bcg_sources import render_bcg
 from .galaxy_structure import add_structure, has_structure
 from .stars import render_stars
 
@@ -53,6 +54,8 @@ def draw_stamp(band_profiles, support_profiles, x, y, n_bands, pixscale, min_sta
 def render_galaxy(record, psf_fwhm, bands, pixscale, min_stamp_pix, structure_min_re_arcsec=None):
     """Bulge + disc stamp for one galaxy record, or None if neither component has a valid size, shape and flux.
     Discs with re_disc_arcsec >= structure_min_re_arcsec also get the arms / bar / clumps of their Hubble type."""
+    if record.get("profile") == "core_sersic":
+        return render_bcg(record, psf_fwhm, bands, pixscale)
     angle = float(record["pa_deg"]) * galsim.degrees
     components = {}
     for name, default_n in COMPONENTS:
@@ -181,6 +184,8 @@ def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1, star_seed=0):
                       "ellipticity_disc", "n_bulge", "n_disc",
                       *[f"flux_{band}_{name}" for band in bands for name, _ in COMPONENTS]]
     galaxy_columns += [column for column in STRUCTURE_COLUMNS if column in galaxies]
+    galaxy_columns += [column for column in ["profile", "re_total_arcsec", *[f"flux_{band}_total" for band in bands]]
+                       if column in galaxies]
     galaxy_records = to_records(galaxies, galaxy_columns, ["x_img", "y_img", "pa_deg"], origin)
     render = partial(render_galaxy, structure_min_re_arcsec=cfg.get("structure_min_re_arcsec"))
     image = render_records(render, galaxy_records, shape, psf_fwhm, cfg, n_workers, "galaxies")

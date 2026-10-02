@@ -27,6 +27,9 @@ python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-
   and bar fractions (Erwin 2018; Melvin et al. 2014). Resolved discs are drawn with the spiral arms, bar or
   irregular clumps of their type, as light moved within the disc so band fluxes are unchanged (`hubble_types.py`,
   `galaxy_structure.py`)
+- **BCG-like sources:** a few core-Sersic envelopes (BCG core + extended diffuse light; Graham et al. 2003 profile
+  with the parameters and photometry of `ICL_DoubleSersic_Injection.ipynb`) per frame (`bcg_sources.py`; `bcgs`,
+  `bcg_per_deg2`, `bcg_re_arcsec`, `bcg_mu_r` in `CONFIG`); rows have `profile` = `core_sersic`
 - **Extended dwarfs, UDGs and almost-dark galaxies:** added on top of the realistic population in deliberately
   generous numbers so a detector sees enough of them (`lsb_galaxies.py`, rates in `CONFIG["lsb_populations"]`):
   extended star-forming dIrrs, ultra-diffuse galaxies (van Dokkum et al. 2015 definition; mostly blue and irregular
