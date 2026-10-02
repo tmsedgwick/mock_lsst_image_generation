@@ -27,6 +27,11 @@ python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-
   and bar fractions (Erwin 2018; Melvin et al. 2014). Resolved discs are drawn with the spiral arms, bar or
   irregular clumps of their type, as light moved within the disc so band fluxes are unchanged (`hubble_types.py`,
   `galaxy_structure.py`)
+- **Extended dwarfs, UDGs and almost-dark galaxies:** added on top of the realistic population in deliberately
+  generous numbers so a detector sees enough of them (`lsb_galaxies.py`, rates in `CONFIG["lsb_populations"]`):
+  extended star-forming dIrrs, ultra-diffuse galaxies (van Dokkum et al. 2015 definition; mostly blue and irregular
+  in the field, Leisman et al. 2017) and almost-dark galaxies with barely visible, very blue, irregular light
+  (ALFALFA examples AGC 229385 and AGC 229101), each drawn within its observed size and surface-brightness range
 
 `catalogue_pipeline.build_mock_catalogue` ties these together. All settings live in `config.py` (`CONFIG`, `PHYS`,
 and `IMAGE_CONFIG` for the images); pass a partial dict to override any of them.
@@ -95,6 +100,10 @@ Galaxy rows also carry `hubble_type` and the parameters that shape its structure
 `arm_strength`, `arm_sharpness`, `arm_phase_deg`, `arm_start_h`, `barred`, `irregularity`, `structure_seed`), from
 their own random stream; pass `dict(hubble_types=False)` to leave them out. Structure is drawn on discs with
 `re_disc_arcsec` of at least `IMAGE_CONFIG["structure_min_re_arcsec"]` (0.4").
+
+The added low-surface-brightness galaxies are flagged by `lsb_population` (`extended_dirr`, `udg`, `almost_dark`)
+and also carry their drawn central g-band surface brightness `mu0_g` and Sersic index `sersic_n`; they have their own
+random stream, so the rest of the catalogue is identical without them (`dict(lsb_galaxies=False)`).
 
 ## Generate images
 

@@ -31,10 +31,9 @@ CONFIG: dict[str, Any] = dict(
     min_training_bands=4, allow_sed_extrapolation=True, warn_edge_distance=0.35, max_rest_edge_distance=0.55,
     # COSMOS donor quality cuts, restricted to bright, reliable HSC-r model magnitudes.
     cosmos_galaxies_only=True,  # LePhare galaxies only: no QSO (or star) donors
-    # Trust a COSMOS Sersic size only inside the Kron aperture (Re <= kron1_a). Good fits have Re ~ 0.5 x Kron; failed
-    # fits of faint sources run their wings into the noise and reach 2-3 x Kron (e.g. 10-20 kpc dwarfs). The Re / Kron
-    # distribution is bimodal with its dip at 1-1.3, so the cut needs no size-mass relation.
-    cosmos_max_sersic_re_over_kron=1.0,
+    # Optional size-quality cut, off: keep only donors whose COSMOS Sersic Re lies inside the Kron aperture
+    # (Re <= value x kron1_a). Off by default because it also removes most of the extended donors.
+    cosmos_max_sersic_re_over_kron=None,
     cosmos_training_z_max=6.0, cosmos_training_logm_min=7.0, cosmos_training_logm_max=12.0,
     cosmos_training_logssfr_min=-15.5, cosmos_training_logssfr_max=-7.0,
     cosmos_training_r_mag_min=20.0, cosmos_training_r_mag_max=24.0, cosmos_training_r_magerr_max=0.2,
@@ -95,6 +94,18 @@ CONFIG: dict[str, Any] = dict(
     # Hubble types drawn from published mass functions, with the arm / bar / clump parameters they imply
     # (hubble_types.py).
     hubble_types=True,
+    # Extended dwarf irregulars, UDGs and almost-dark galaxies (lsb_galaxies.py), added on top of the realistic
+    # population in deliberately generous numbers (per deg^2) so a detector sees enough of them; each population is
+    # drawn within its observed ranges of redshift, Re (kpc) and central g-band surface brightness mu0_g.
+    lsb_galaxies=True,
+    lsb_populations=dict(
+        extended_dirr=dict(per_deg2=800, z=(0.005, 0.06), re_kpc=(1.0, 3.0), mu0_g=(22.5, 24.0), quiescent_frac=0.0,
+                           donors="star_forming", irregularity=(0.5, 0.1)),
+        udg=dict(per_deg2=800, z=(0.005, 0.06), re_kpc=(1.5, 5.0), mu0_g=(24.0, 27.0), quiescent_frac=0.25,
+                 donors="star_forming", irregularity=(0.5, 0.1)),
+        almost_dark=dict(per_deg2=100, z=(0.003, 0.03), re_kpc=(1.5, 3.5), mu0_g=(26.0, 28.0), quiescent_frac=0.0,
+                         donors="bluest", irregularity=(0.8, 0.05)),
+    ),
 )
 
 # Stars, calibrated on the stars of a real LSSTCam deep coadd (StarSimulation.ipynb). Only g, r and i were calibrated:

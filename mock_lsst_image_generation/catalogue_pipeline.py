@@ -23,6 +23,7 @@ from .donor_selection import rest_frame_sed_checks
 from .environment_sampling import assign_clustered_positions, draw_web_positions
 from .gsmf_sampling import build_gsmf_sampling_tables, draw_gsmf_masses
 from .hubble_types import add_hubble_types
+from .lsb_galaxies import add_lsb_galaxies
 from .photometry import REST_COLS
 from .rest_frame_sed_sampling import (RestFrameEmpiricalPDF, build_rest_frame_donor_table, project_to_observed_frame,
                                       sample_rest_frame_properties)
@@ -154,6 +155,8 @@ def build_mock_catalogue(cosmos, cfg=None, phys=None):
     if cfg["hubble_types"]:  # before the clumps, which follow the arms; own random stream, so nothing else changes
         mock = add_hubble_types(mock, np.random.default_rng([cfg["seed"], 2]))
     mock, tidal_pairs = select_tidal_pairs(mock, cfg, rng) if cfg["tidal_streams"] else (mock, pd.DataFrame())
+    if cfg["lsb_galaxies"]:  # after the tidal pairs, before the clumps (which they get too); own random stream
+        mock = add_lsb_galaxies(mock, donors, cfg, phys, grids, np.random.default_rng([cfg["seed"], 4]))
     clumps, tidal_blobs = pd.DataFrame(), pd.DataFrame()
     if cfg["sf_clumps"]:
         print("Adding SF clumps...", flush=True)

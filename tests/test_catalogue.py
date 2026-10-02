@@ -20,9 +20,9 @@ from mock_lsst_image_generation.utils import resolved_mask
 # Counts and column sums of the reference realisation (macOS, pinned requirements). Other platforms can differ in the
 # last few decimal places, which can flip galaxies across cuts. Clump counts are tested against their distribution
 # separately because changed hosts and rejection sampling can shift the subsequent random draws.
-REFERENCE_COUNTS = dict(galaxies=4515, tidal_pairs=0, tidal_blobs=0, donors=17172)
-REFERENCE_SUMS = dict(z=10323.477039907393, logM=36004.27587602344, mag_r_total=126372.20129468715,
-                      re_total_arcsec=1040.206867385033)
+REFERENCE_COUNTS = dict(galaxies=4183, tidal_pairs=1, tidal_blobs=162, donors=18476)
+REFERENCE_SUMS = dict(z=9249.33071063945, logM=33419.45976027333, mag_r_total=116806.07127182753,
+                      re_total_arcsec=1224.8041668612232)
 COUNT_TOLERANCE, SUM_TOLERANCE = 0.01, 0.01
 
 
@@ -69,7 +69,9 @@ def test_catalogue_is_physically_sane(catalogue):
     assert g["id"].tolist() == list(range(len(g)))
     assert g["x_pix"].between(0, npix).all() and g["y_pix"].between(0, npix).all()
     assert g["z"].between(CONFIG["z_min"], CONFIG["z_max"]).all()
-    assert g["logM"].between(CONFIG["logm_min"], CONFIG["logm_max"]).all()
+    main = g["lsb_population"].isna() if "lsb_population" in g else np.ones(len(g), bool)
+    assert g.loc[main, "logM"].between(CONFIG["logm_min"], CONFIG["logm_max"]).all()
+    assert g.loc[~main, "logM"].between(5.0, CONFIG["logm_max"]).all()  # added LSB galaxies may be lighter
     for band in OUT_BANDS:
         assert np.isfinite(g[f"mag_{band}_total"]).all() and (g[f"flux_{band}_total"] > 0).all(), band
     assert (g["sb_r_total"] <= CONFIG["render_mu_r_max"]).all()
