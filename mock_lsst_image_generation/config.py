@@ -69,7 +69,13 @@ CONFIG: dict[str, Any] = dict(
     bulge_edgeon_q0=0.60,  # coupling only becomes important below this disc q
     # Positions: one coherent light-cone cosmic web, calibrated on a 100 Mpc toy cube. With
     # assign_positions_after_observables the finished galaxies are re-placed onto web sites by environment score.
-    clustered_positions=True, assign_positions_after_observables=False,
+    clustered_positions=True, assign_positions_after_observables=True,
+    # Joint mass / star formation / environment: each galaxy's environment is drawn from its class (red / blue x low /
+    # high surface brightness as T24 selected them; environment_sampling.reference_classes) as (P(structure), P(cluster |
+    # structure)). For a class with structure fraction f, w(theta) ~ f^2 w_structure (field sites are unclustered), so
+    # f = sqrt(A_T24 / A_structure) with A_structure = 0.67 at 1 deg (mock, z < 0.1) and A_T24 the Thuruthipilly et al.
+    # 2024 (Table 4) amplitudes: red HSB 0.245, blue HSB 0.065, red LSB 0.671 (in cluster outskirts), blue LSB 0.051.
+    environment_by_class=dict(red_hsb=(0.69, 0.3), blue_hsb=(0.40, 0.0), red_lsb=(1.0, 0.9), blue_lsb=(0.41, 0.05)),
     web_parent_pad_mpc=35.0, web_candidate_oversample=8,
     # Draw cluster/filament sites only from web structure within web_cone_reach_mpc of the cone until the design
     # fractions (web_f_cluster, web_f_filament) hold inside the cone; False = original draw-everywhere-then-clip,
