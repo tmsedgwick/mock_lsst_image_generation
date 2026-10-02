@@ -96,9 +96,9 @@ class SpiralStructure(NamedTuple):
     sharpness: float
 
 
-SPIRAL_STRUCTURE = dict(a=SpiralStructure(pitch=(10, 2), strength=(0.55, 0.1), sharpness=3),
-                        b=SpiralStructure(pitch=(16, 3), strength=(0.70, 0.1), sharpness=4),
-                        c=SpiralStructure(pitch=(24, 4), strength=(0.85, 0.08), sharpness=5))
+SPIRAL_STRUCTURE = dict(a=SpiralStructure(pitch=(10, 2), strength=(0.45, 0.1), sharpness=1.5),
+                        b=SpiralStructure(pitch=(16, 3), strength=(0.55, 0.1), sharpness=2.0),
+                        c=SpiralStructure(pitch=(24, 4), strength=(0.65, 0.08), sharpness=2.5))
 BAR_RADIUS_H = 1.6  # arms start at the bar's end, in disc scale lengths; unbarred arms start at ARM_START_H
 ARM_START_H = 0.5
 IRREGULARITY = (0.5, 0.1)  # amplitude of an Irr's random low-order modes
@@ -218,7 +218,7 @@ def draw_structure(types, rng, logM=None):
         rows = np.flatnonzero([t in (f"S{stage}", f"SB{stage}") for t in types])
         out.loc[rows, "n_arms"] = 2
         out.loc[rows, "arm_pitch_deg"] = np.clip(rng.normal(*s.pitch, len(rows)), 5, 40)
-        out.loc[rows, "arm_strength"] = np.clip(rng.normal(*s.strength, len(rows)), 0.2, 0.95)
+        out.loc[rows, "arm_strength"] = np.clip(rng.normal(*s.strength, len(rows)), 0.2, 0.8)
         out.loc[rows, "arm_sharpness"] = float(s.sharpness)
     irregular = np.flatnonzero(types == "Irr")
     out.loc[irregular, "irregularity"] = np.clip(rng.normal(*IRREGULARITY, len(irregular)), 0.1, 0.9)
