@@ -134,13 +134,14 @@ def spike_line(half, angle_deg, width_fwhm, core_arcsec, slope, arm_weights, pix
 
 
 def star_stamp(star, half, psf_fwhm, angles, cfg, rng, star_cfg=STAR_CONFIG):
-    """(band, 2h+1, 2h+1) image of one star in nJy/pixel: core + halo + spikes, each band at its PSF."""
+    """(stamp, spikes): (band, 2h+1, 2h+1) images of one star in nJy/pixel, the whole star (core + halo + spikes, each
+    band at its PSF) and its diffraction spikes alone."""
     size, pixscale = 2 * half + 1, cfg["pixscale"]
     streaks = radial_streaks(half, rng, star.streak_strength, pixscale)
     taper = 1 / (1 + (np.hypot(*pixel_grid(half)) * pixscale / star.halo_cut_arcsec) ** 6)
     halos = [galsim.Moffat(beta=beta, fwhm=fwhm).drawImage(nx=size, ny=size, scale=pixscale).array * taper * streaks
              for beta, fwhm in star_cfg["halo_basis"]]
-    stamp = np.zeros((len(cfg["bands"]), size, size))
+    stamp, spike_stamp = np.zeros((len(cfg["bands"]), size, size)), np.zeros((len(cfg["bands"]), size, size))
     for i, band in enumerate(cfg["bands"]):
         flux = getattr(star, f"flux_{band}_total")
         core_arcsec = star.spike_core_arcsec * BAND_WAVELENGTH_NM[band] / BAND_WAVELENGTH_NM["r"]  # longer when redder
@@ -153,7 +154,8 @@ def star_stamp(star, half, psf_fwhm, angles, cfg, rng, star_cfg=STAR_CONFIG):
         core_fraction = 1 - sum(star_cfg["halo_fraction"][band]) - spikes.sum() / flux
         core = galsim.Gaussian(fwhm=psf_fwhm[band]).drawImage(nx=size, ny=size, scale=pixscale).array
         stamp[i] = flux * core_fraction * core + halo + spikes
-    return stamp
+        spike_stamp[i] = spikes
+    return stamp, spike_stamp
 
 
 def add_stamp(image, stamp, x, y):
@@ -165,13 +167,19 @@ def add_stamp(image, stamp, x, y):
         image[:, y0:y1, x0:x1] += stamp[:, y0 - (y - h):y1 - (y - h), x0 - (x - h):x1 - (x - h)]
 
 
-def render_stars(stars, shape, origin, psf_fwhm, cfg, rng, star_cfg=STAR_CONFIG):
-    """(band, ny, nx) image of the catalogue's stars, on the canvas whose frame pixel origin is at image[:, 0, 0]."""
+def render_stars(stars, shape, origin, psf_fwhm, cfg, rng, star_cfg=STAR_CONFIG, spikes_out=None):
+    """(band, ny, nx) image of the catalogue's stars, on the canvas whose frame pixel origin is at image[:, 0, 0].
+
+    If spikes_out (an array of the same shape) is given, the diffraction spikes alone are also added to it: the truth
+    a detector can learn spike pixels from."""
     image = np.zeros(shape, np.float32)
     angles = spike_angles(rng, cfg["bands"], star_cfg)
     for star in stars.itertuples():
-        stamp = star_stamp(star, stamp_half_size(star.mag_r_total), psf_fwhm, angles, cfg, rng, star_cfg)
-        add_stamp(image, stamp, int(round(star.x_pix)) - origin[0], int(round(star.y_pix)) - origin[1])
+        stamp, spikes = star_stamp(star, stamp_half_size(star.mag_r_total), psf_fwhm, angles, cfg, rng, star_cfg)
+        x, y = int(round(star.x_pix)) - origin[0], int(round(star.y_pix)) - origin[1]
+        add_stamp(image, stamp, x, y)
+        if spikes_out is not None:
+            add_stamp(spikes_out, spikes, x, y)
     return image
 
 

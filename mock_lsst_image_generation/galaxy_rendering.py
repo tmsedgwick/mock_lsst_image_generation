@@ -167,12 +167,13 @@ def split_stars(table):
     return table[~is_star], table[is_star]
 
 
-def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1, star_seed=0):
+def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1, star_seed=0, spikes_out=None):
     """Noise-free (band, y, x) float32 image of a catalogue's galaxies, clumps, tidal blobs and stars (nJy per pixel),
     with each band convolved with a Gaussian PSF of FWHM psf_fwhm[band] arcsec.
 
     The canvas spans the galaxy centres; returns (image, origin) where origin = (x_min, y_min) is the frame pixel at
-    image[:, 0, 0]. star_seed seeds the stars' random details (spike angles, arm brightness, halo streaks).
+    image[:, 0, 0]. star_seed seeds the stars' random details (spike angles, arm brightness, halo streaks). If
+    spikes_out is a list, the stars' diffraction spikes alone are appended to it as an image of the same shape.
     """
     bands, (galaxies, stars) = cfg["bands"], split_stars(catalogue.galaxies)
     x_min, x_max = int(np.floor(galaxies["x_pix"].min())), int(np.ceil(galaxies["x_pix"].max()))
@@ -197,6 +198,10 @@ def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1, star_seed=0):
         if len(table):
             blob_records = to_records(to_blobs(table), blob_columns, ["x_img", "y_img", "sigma_arcsec"], origin)
             image += render_records(render_blob, blob_records, shape, psf_fwhm, cfg, n_workers, label)
+    spikes = np.zeros(shape, np.float32)
     if len(stars):
-        image += render_stars(stars, shape, origin, psf_fwhm, cfg, np.random.default_rng([star_seed, 2]))
+        image += render_stars(stars, shape, origin, psf_fwhm, cfg, np.random.default_rng([star_seed, 2]),
+                              spikes_out=spikes)
+    if spikes_out is not None:
+        spikes_out.append(spikes)
     return image, origin
