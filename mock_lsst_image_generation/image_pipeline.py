@@ -2,7 +2,9 @@
 
 For catalogue <name>, <out_dir>/<name>/ holds:
   base_clean_signal.npy           noise-free render at the narrow base PSF (float32, band x y x, nJy per pixel)
-  base_spike_signal.npy           the stars' diffraction spikes alone, on the same grid: truth for spike detection
+  base_<component>_signal.npy     the light of the star-forming clumps, the tidal features and the stars' diffraction
+                                  spikes alone (component = clumps, tidal, spikes), on the same grid: truth for
+                                  learning where each phenomenon is
   base_meta.json                  bands, canvas origin in frame pixels, shape, pixel scale, zeropoint and base PSF
   coadd_manifest.json             every coadd: visits and PSF FWHM per band, noise seed, and whether it was saved
   <name>_<coadd>_signal.npy       saved coadds (nJy per pixel) ...
@@ -63,12 +65,14 @@ def generate_catalogue_images(catalogue, name, out_dir, mode="training", cfg=Non
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n===== [{name}] rendering at the base PSF, FWHM = {cfg['base_fwhm']}\" =====", flush=True)
-    spikes = []
+    components = {}
     base_image, origin = render_catalogue(catalogue, {band: cfg["base_fwhm"] for band in cfg["bands"]}, cfg, n_workers,
-                                          star_seed=index, spikes_out=spikes)
+                                          star_seed=index, components_out=components)
     stars = split_stars(catalogue.galaxies)[1]
     np.save(out_dir / "base_clean_signal.npy", base_image)
-    np.save(out_dir / "base_spike_signal.npy", spikes[0])
+    for component, light in components.items():
+        np.save(out_dir / f"base_{component}_signal.npy", light)
+    del components
     write_json(out_dir / "base_meta.json", dict(split=name, origin=list(origin), bands=cfg["bands"],
                                                 base_fwhm=cfg["base_fwhm"], shape=list(base_image.shape),
                                                 ps=cfg["pixscale"], zp=cfg["zeropoint"]))

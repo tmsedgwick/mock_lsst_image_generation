@@ -23,9 +23,27 @@ def catalogue():
 
 
 @pytest.fixture(scope="module")
-def base_image(catalogue):
-    return render_catalogue(catalogue, {band: IMAGE_CONFIG["base_fwhm"] for band in IMAGE_CONFIG["bands"]},
-                            IMAGE_CONFIG)[0]
+def rendered(catalogue):
+    """(base image, {component: its light alone})."""
+    components = {}
+    image = render_catalogue(catalogue, {band: IMAGE_CONFIG["base_fwhm"] for band in IMAGE_CONFIG["bands"]},
+                             IMAGE_CONFIG, components_out=components)[0]
+    return image, components
+
+
+@pytest.fixture(scope="module")
+def base_image(rendered):
+    return rendered[0]
+
+
+def test_component_images_hold_their_own_light(catalogue, rendered):
+    image, components = rendered
+    assert set(components) == {"clumps", "tidal", "spikes"}
+    assert all(light.shape == image.shape for light in components.values())
+    assert 0 < components["clumps"][2].sum() <= catalogue.clumps["flux_r_clump"].sum()
+    assert components["clumps"].min() > -1e-3 * components["clumps"].max()  # only rendering ringing below 0
+    assert not components["spikes"].any()  # this catalogue has no stars
+    assert components["tidal"].sum() < image.sum()
 
 
 def test_render_keeps_catalogue_flux(catalogue, base_image):

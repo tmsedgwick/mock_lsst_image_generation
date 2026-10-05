@@ -167,13 +167,18 @@ def split_stars(table):
     return table[~is_star], table[is_star]
 
 
-def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1, star_seed=0, spikes_out=None):
+# Light rendered into the image that render_catalogue can also return on its own (truth for learning where it is).
+COMPONENT_IMAGES = ("clumps", "tidal", "spikes")
+
+
+def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1, star_seed=0, components_out=None):
     """Noise-free (band, y, x) float32 image of a catalogue's galaxies, clumps, tidal blobs and stars (nJy per pixel),
     with each band convolved with a Gaussian PSF of FWHM psf_fwhm[band] arcsec.
 
     The canvas spans the galaxy centres; returns (image, origin) where origin = (x_min, y_min) is the frame pixel at
     image[:, 0, 0]. star_seed seeds the stars' random details (spike angles, arm brightness, halo streaks). If
-    spikes_out is a list, the stars' diffraction spikes alone are appended to it as an image of the same shape.
+    components_out is a dict, it receives an image of the same shape for each of COMPONENT_IMAGES: the light of the
+    star-forming clumps, of the tidal features and of the stars' diffraction spikes alone.
     """
     bands, (galaxies, stars) = cfg["bands"], split_stars(catalogue.galaxies)
     x_min, x_max = int(np.floor(galaxies["x_pix"].min())), int(np.ceil(galaxies["x_pix"].max()))
@@ -191,17 +196,19 @@ def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1, star_seed=0, spikes_
     render = partial(render_galaxy, structure_min_re_arcsec=cfg.get("structure_min_re_arcsec"))
     image = render_records(render, galaxy_records, shape, psf_fwhm, cfg, n_workers, "galaxies")
 
+    components = {name: np.zeros(shape, np.float32) for name in COMPONENT_IMAGES}
     blob_columns = ["x_img", "y_img", "sigma_arcsec", *[f"flux_{band}" for band in bands]]
     blob_tables = [("clumps", catalogue.clumps, lambda table: clump_blobs(table, bands)),
-                   ("tidal blobs", catalogue.tidal_blobs, lambda table: tidal_blobs(table, bands, cfg["pixscale"]))]
-    for label, table, to_blobs in blob_tables:
+                   ("tidal", catalogue.tidal_blobs, lambda table: tidal_blobs(table, bands, cfg["pixscale"]))]
+    for name, table, to_blobs in blob_tables:
         if len(table):
             blob_records = to_records(to_blobs(table), blob_columns, ["x_img", "y_img", "sigma_arcsec"], origin)
-            image += render_records(render_blob, blob_records, shape, psf_fwhm, cfg, n_workers, label)
-    spikes = np.zeros(shape, np.float32)
+            components[name] = render_records(render_blob, blob_records, shape, psf_fwhm, cfg, n_workers,
+                                              "clumps" if name == "clumps" else "tidal blobs")
+            image += components[name]
     if len(stars):
         image += render_stars(stars, shape, origin, psf_fwhm, cfg, np.random.default_rng([star_seed, 2]),
-                              spikes_out=spikes)
-    if spikes_out is not None:
-        spikes_out.append(spikes)
+                              spikes_out=components["spikes"])
+    if components_out is not None:
+        components_out.update(components)
     return image, origin
