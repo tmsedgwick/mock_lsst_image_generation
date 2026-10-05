@@ -3,7 +3,7 @@
 Each catalogue is an independent realisation of the same forward model; only the seed differs. The first four are
 named train, valid, calib and test, any further ones extra1, extra2, ... (or, with --numbered, all are named 1, 2, 3,
 ... for use outside model training), and each is written as
-<out-dir>/mock_catalogue_<name>{,_clumps,_tidal,_tidal_pairs}.csv
+<out-dir>/mock_catalogue_<name>{,_sfregions,_tidal,_tidal_pairs}.csv
 
     python scripts/generate_mock_catalogues.py --out-dir ~/mocks/catalogues
     python scripts/generate_mock_catalogues.py --out-dir ~/mocks/catalogues --n-catalogues 2 --numbered

@@ -14,7 +14,7 @@ observed parameter space:
 Redshifts are volume-weighted within each population's range; Re (kpc) is log-uniform, mu0_g uniform, the Sersic index
 uniform in SERSIC_N and the axis ratio in AXIS_RATIO. Each galaxy takes a real donor's SED (all colours together),
 rescaled so the bulgeless disc has the drawn central surface brightness; its stellar mass follows from the donor's
-mass-to-light ratio. Star-forming galaxies are Irr, with irregular modes that their clumps follow; quiescent UDGs are
+mass-to-light ratio. Star-forming galaxies are Irr, with irregular modes that their sfregions follow; quiescent UDGs are
 smooth (En). Rows are flagged by lsb_population.
 """
 
@@ -106,7 +106,8 @@ def give_structure(t, rng, irregularity):
 
 def add_lsb_galaxies(mock, donors, cfg, phys, grids, rng):
     """Catalogue with each population of cfg['lsb_populations'] appended (Poisson numbers for the frame area), as
-    bulgeless discs ready for rendering, clumps and the rest of the pipeline; new ids follow the existing ones."""
+    bulgeless discs ready for rendering, star-forming regions and the rest of the pipeline; new ids follow the existing
+    ones."""
     tables = []
     for name, spec in cfg["lsb_populations"].items():
         n = rng.poisson(spec["per_deg2"] * grids["area_deg2"])

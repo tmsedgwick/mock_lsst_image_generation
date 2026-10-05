@@ -1,10 +1,11 @@
-"""Render a mock catalogue (galaxies, star-forming clumps, tidal blobs) into a noise-free ugrizy image cube with GalSim.
+"""Render a mock catalogue (galaxies, star-forming regions, tidal blobs) into a noise-free ugrizy image cube with
+GalSim.
 
 Bulges and discs are untruncated Sersic profiles (n = 4 / 1 when the catalogue has none) sharing the galaxy's position
-angle; clumps and tidal blobs are Gaussians. Each object is convolved with its band's Gaussian PSF and drawn on its own
-stamp, sized by GalSim so that no flux is clipped, then added to the canvas. Positions use GalSim's 1-indexed pixel
-convention: canvas pixel (x, y) is image[:, y - 1, x - 1], and frame pixel x_pix sits at canvas x = x_pix - x_min + 1.
-"""
+angle; star-forming regions and tidal blobs are Gaussians. Each object is convolved with its band's Gaussian PSF and
+drawn on its own stamp, sized by GalSim so that no flux is clipped, then added to the canvas. Positions use GalSim's
+1-indexed pixel convention: canvas pixel (x, y) is image[:, y - 1, x - 1], and frame pixel x_pix sits at canvas x =
+x_pix - x_min + 1."""
 
 import multiprocessing as mp
 from collections import deque
@@ -86,7 +87,8 @@ def render_galaxy(record, psf_fwhm, bands, pixscale, min_stamp_pix, structure_mi
 
 
 def render_blob(record, psf_fwhm, bands, pixscale, min_stamp_pix):
-    """Gaussian stamp for one clump or tidal blob record, or None if it has no valid position, width or flux."""
+    """Gaussian stamp for one star-forming region or tidal blob record, or None if it has no valid position, width or
+flux."""
     x, y, sigma = float(record["x_img"]), float(record["y_img"]), float(record["sigma_arcsec"])
     fluxes = [positive_flux(record, f"flux_{band}") for band in bands]
     if not (np.isfinite(x) and np.isfinite(y) and np.isfinite(sigma) and sigma > 0 and any(fluxes)):
@@ -134,10 +136,10 @@ def render_records(render, records, shape, psf_fwhm, cfg, n_workers, label):
     return image
 
 
-def clump_blobs(clumps, bands):
-    """Clump table in the blob form render_blob reads: x_pix, y_pix, sigma_arcsec, flux_<band>."""
-    return clumps.rename(columns={"x_pix_clump": "x_pix", "y_pix_clump": "y_pix",
-                                  **{f"flux_{band}_clump": f"flux_{band}" for band in bands}})
+def sfregion_blobs(sfregions, bands):
+    """Star-forming region table in the blob form render_blob reads: x_pix, y_pix, sigma_arcsec, flux_<band>."""
+    return sfregions.rename(columns={"x_pix_sfregion": "x_pix", "y_pix_sfregion": "y_pix",
+                                  **{f"flux_{band}_sfregion": f"flux_{band}" for band in bands}})
 
 
 def tidal_blobs(tidal, bands, pixscale):
@@ -172,13 +174,13 @@ COMPONENT_IMAGES = ("sfregions", "tidal", "spikes")
 
 
 def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1, star_seed=0, components_out=None):
-    """Noise-free (band, y, x) float32 image of a catalogue's galaxies, clumps, tidal blobs and stars (nJy per pixel),
-    with each band convolved with a Gaussian PSF of FWHM psf_fwhm[band] arcsec.
+    """Noise-free (band, y, x) float32 image of a catalogue's galaxies, star-forming regions, tidal blobs and stars (nJy
+    per pixel), with each band convolved with a Gaussian PSF of FWHM psf_fwhm[band] arcsec.
 
     The canvas spans the galaxy centres; returns (image, origin) where origin = (x_min, y_min) is the frame pixel at
     image[:, 0, 0]. star_seed seeds the stars' random details (spike angles, arm brightness, halo streaks). If
     components_out is a dict, it receives an image of the same shape for each of COMPONENT_IMAGES: the light of the
-    star-forming clumps, of the tidal features and of the stars' diffraction spikes alone.
+    star-forming regions, of the tidal features and of the stars' diffraction spikes alone.
     """
     bands, (galaxies, stars) = cfg["bands"], split_stars(catalogue.galaxies)
     x_min, x_max = int(np.floor(galaxies["x_pix"].min())), int(np.ceil(galaxies["x_pix"].max()))
@@ -198,13 +200,13 @@ def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1, star_seed=0, compone
 
     components = {name: np.zeros(shape, np.float32) for name in COMPONENT_IMAGES}
     blob_columns = ["x_img", "y_img", "sigma_arcsec", *[f"flux_{band}" for band in bands]]
-    blob_tables = [("sfregions", catalogue.clumps, lambda table: clump_blobs(table, bands)),
+    blob_tables = [("sfregions", catalogue.sfregions, lambda table: sfregion_blobs(table, bands)),
                    ("tidal", catalogue.tidal_blobs, lambda table: tidal_blobs(table, bands, cfg["pixscale"]))]
     for name, table, to_blobs in blob_tables:
         if len(table):
             blob_records = to_records(to_blobs(table), blob_columns, ["x_img", "y_img", "sigma_arcsec"], origin)
             components[name] = render_records(render_blob, blob_records, shape, psf_fwhm, cfg, n_workers,
-                                              "clumps" if name == "sfregions" else "tidal blobs")
+                                              "sfregions" if name == "sfregions" else "tidal blobs")
             image += components[name]
     if len(stars):
         image += render_stars(stars, shape, origin, psf_fwhm, cfg, np.random.default_rng([star_seed, 2]),

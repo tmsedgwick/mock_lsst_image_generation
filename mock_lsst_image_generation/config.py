@@ -71,7 +71,8 @@ CONFIG: dict[str, Any] = dict(
     # assign_positions_after_observables the finished galaxies are re-placed onto web sites by environment score.
     clustered_positions=True, assign_positions_after_observables=True,
     # Joint mass / star formation / environment: each galaxy's environment is drawn from its class (red / blue x low /
-    # high surface brightness as T24 selected them; environment_sampling.reference_classes) as (P(structure), P(cluster |
+    # high surface brightness as T24 selected them; environment_sampling.reference_classes) as (P(structure), P(cluster
+    # |
     # structure)). For a class with structure fraction f, w(theta) ~ f^2 w_structure (field sites are unclustered), so
     # f = sqrt(A_T24 / A_structure) with A_structure = 0.67 at 1 deg (mock, z < 0.1) and A_T24 the Thuruthipilly et al.
     # 2024 (Table 4) amplitudes: red HSB 0.245, blue HSB 0.065, red LSB 0.671 (in cluster outskirts), blue LSB 0.051.
@@ -88,9 +89,10 @@ CONFIG: dict[str, Any] = dict(
     # function of log M >= 9.5 galaxies at 0.2 < z < 1.2 matches Zehavi et al. (2005): r0 = 5.59 / h Mpc,
     # gamma = 1.84 (16 realisations: gamma = 1.85, within 0.7-1.3 of the power law at 0.1-6.5 Mpc).
     web_assign_bin_mpc=15.0, web_site_keep_bias=0.08, env_assign_scatter=0.75,  # site assignment in narrow shells
-    # Star-forming clumps.
-    sf_clumps=True, clump_mean_single_u_frac=0.0035, clump_max_r_re=2.0, clump_central_hole_re=1.0,
-    clump_flux_radius_bias=0.0, clump_flux_scatter=0.35, clump_sigma_floor_arcsec=0.01, clump_n_max_per_gal=64,
+    # Star-forming regions.
+    sfregions=True, sfregion_mean_single_u_frac=0.0035, sfregion_max_r_re=2.0, sfregion_central_hole_re=1.0,
+    sfregion_flux_radius_bias=0.0, sfregion_flux_scatter=0.35, sfregion_sigma_floor_arcsec=0.01,
+    sfregion_n_max_per_gal=64,
     # Tidal bridges between interacting pairs. Targets are fractions of galaxies per environment, not per-pair
     # probabilities; the candidate pool is loose enough for this light-cone mock.
     tidal_streams=True, tidal_target_field=0.02, tidal_target_filament=0.08, tidal_target_cluster=0.04,
@@ -99,7 +101,8 @@ CONFIG: dict[str, Any] = dict(
     tidal_column_sig_re_frac_min=0.28, tidal_column_sig_re_frac_max=0.44,
     tidal_column_sig_pix_min=4.4, tidal_column_sig_pix_max=9.6,
     tidal_n_curve=9, tidal_n_straight=11, tidal_curve_strength=0.7, tidal_inward_pull=0.45,
-    # Clumps and tidal features only go on resolved galaxies: resolved_re_col > PSF FWHM in resolved_psf_band.
+    # Star-forming regions and tidal features only go on resolved galaxies: resolved_re_col > PSF FWHM in
+    # resolved_psf_band.
     psf_fwhm_arcsec=dict(u=1.16, g=1.11, r=1.05, i=1.01, z=0.97, y=0.95), resolved_psf_band="r",
     resolved_re_col="re_total_arcsec",
     # Bright stars (see stars.py and STAR_CONFIG): added to the catalogue as rows with type "star".
@@ -110,7 +113,8 @@ CONFIG: dict[str, Any] = dict(
     # Extended dwarf irregulars, UDGs and almost-dark galaxies (lsb_galaxies.py), added on top of the realistic
     # population in deliberately generous numbers (per deg^2) so a detector sees enough of them; each population is
     # drawn within its observed ranges of redshift, Re (kpc) and central g-band surface brightness mu0_g.
-    # A few BCG-like core-Sersic sources (BCG core + extended envelope; bcg_sources.py, ICL_DoubleSersic_Injection.ipynb)
+    # A few BCG-like core-Sersic sources (BCG core + extended envelope; bcg_sources.py,
+    # ICL_DoubleSersic_Injection.ipynb)
     # per frame: Re (arcsec) log-uniform and mean r-band SB within the half-light area mu_r uniform in these ranges.
     bcgs=True, bcg_per_deg2=40, bcg_re_arcsec=(5.0, 30.0), bcg_mu_r=(20.0, 25.0),
     lsb_galaxies=True,

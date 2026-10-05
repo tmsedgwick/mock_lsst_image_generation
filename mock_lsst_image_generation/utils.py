@@ -59,7 +59,7 @@ def resolution_fwhm_arcsec(cfg):
 
 
 def is_resolved(row, cfg):
-    """True if the galaxy's Re exceeds the PSF FWHM, i.e. it can host clumps and tidal features."""
+    """True if the galaxy's Re exceeds the PSF FWHM, i.e. it can host star-forming regions and tidal features."""
     re = float(row.get(cfg["resolved_re_col"], np.nan))
     return np.isfinite(re) and re > resolution_fwhm_arcsec(cfg)
 

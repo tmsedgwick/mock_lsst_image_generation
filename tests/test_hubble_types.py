@@ -1,4 +1,4 @@
-"""Checks of the Hubble types drawn for catalogues and of the arms / bars / clumps drawn for them."""
+"""Checks of the Hubble types drawn for catalogues and of the arms / bars / star-forming regions drawn for them."""
 
 import numpy as np
 import pandas as pd
@@ -7,7 +7,7 @@ from mock_lsst_image_generation.galaxy_rendering import render_galaxy
 from mock_lsst_image_generation.galaxy_structure import structure_images, structure_weight
 from mock_lsst_image_generation.hubble_types import (BROAD, add_hubble_types, broad_probabilities, class_density,
                                                      draw_structure)
-from mock_lsst_image_generation.sf_clump_generation import follow_structure
+from mock_lsst_image_generation.sfregion_generation import follow_structure
 
 TYPES = {f"E{n}" for n in range(8)} | {"S0", "SB0", "Sa", "Sb", "Sc", "SBa", "SBb", "SBc", "Sm", "SBm", "Irr"}
 
@@ -88,9 +88,9 @@ def test_rendered_spiral_keeps_band_fluxes():
     assert spiral.min() > -1e-3 * plain.max()
 
 
-def test_clumps_crowd_onto_the_arms():
-    """Clump positions follow the structured light: the arm-to-smooth light ratio where clumps land averages well
-    above its value at positions drawn from the smooth disc (which is 1 on average)."""
+def test_sfregions_crowd_onto_the_arms():
+    """Star-forming region positions follow the structured light: the arm-to-smooth light ratio where star-forming
+    regions land averages well above its value at positions drawn from the smooth disc (which is 1 on average)."""
     record = galaxy_record("Sc", structure_seed=5)
     rd = record["re_disc_arcsec"] / 1.678
     rad, phi = follow_structure(record, rd, 0.5, 4.0, 400)
