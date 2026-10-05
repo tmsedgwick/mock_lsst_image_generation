@@ -198,7 +198,7 @@ def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1, star_seed=0, compone
     render = partial(render_galaxy, structure_min_re_arcsec=cfg.get("structure_min_re_arcsec"))
     image = render_records(render, galaxy_records, shape, psf_fwhm, cfg, n_workers, "galaxies")
 
-    components = {name: np.zeros(shape, np.float32) for name in COMPONENT_IMAGES}
+    components: dict[str, np.ndarray] = {name: np.zeros(shape, np.float32) for name in COMPONENT_IMAGES}
     blob_columns = ["x_img", "y_img", "sigma_arcsec", *[f"flux_{band}" for band in bands]]
     blob_tables = [("sfregions", catalogue.sfregions, lambda table: sfregion_blobs(table, bands)),
                    ("tidal", catalogue.tidal_blobs, lambda table: tidal_blobs(table, bands, cfg["pixscale"]))]
@@ -206,7 +206,7 @@ def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1, star_seed=0, compone
         if len(table):
             blob_records = to_records(to_blobs(table), blob_columns, ["x_img", "y_img", "sigma_arcsec"], origin)
             components[name] = render_records(render_blob, blob_records, shape, psf_fwhm, cfg, n_workers,
-                                              "sfregions" if name == "sfregions" else "tidal blobs")
+                                              "star-forming regions" if name == "sfregions" else "tidal blobs")
             image += components[name]
     if len(stars):
         image += render_stars(stars, shape, origin, psf_fwhm, cfg, np.random.default_rng([star_seed, 2]),
