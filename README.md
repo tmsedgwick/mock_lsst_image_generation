@@ -147,7 +147,7 @@ Rendering is the slow step; it runs in parallel over `--n-workers` processes (de
 | File | Contents |
 |---|---|
 | `base_clean_signal.npy` | Noise-free render at the 0.45″ base PSF, float32 (band, y, x) in nJy per pixel |
-| `base_clumps_signal.npy`, `base_tidal_signal.npy`, `base_spikes_signal.npy` | The light of the star-forming clumps, the tidal features and the stars' diffraction spikes alone, on the same grid: truth for learning where each is |
+| `base_sfregions_signal.npy`, `base_tidal_signal.npy`, `base_spikes_signal.npy` | The light of the star-forming clumps, the tidal features and the stars' diffraction spikes alone, on the same grid: truth for learning where each is |
 | `base_meta.json` | Bands, canvas origin in frame pixels, shape, pixel scale, zeropoint, base PSF |
 | `coadd_manifest.json` | Every coadd: visits and PSF FWHM per band, noise seed, and whether it was saved |
 | `<catalogue>_<coadd>_signal.npy` | A saved coadd (nJy per pixel), e.g. `test_1y_fwhm110_signal.npy`, `test_10y_nominal_signal.npy` or `test_nexp50_fwhm130_signal.npy` |

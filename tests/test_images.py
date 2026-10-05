@@ -38,10 +38,10 @@ def base_image(rendered):
 
 def test_component_images_hold_their_own_light(catalogue, rendered):
     image, components = rendered
-    assert set(components) == {"clumps", "tidal", "spikes"}
+    assert set(components) == {"sfregions", "tidal", "spikes"}
     assert all(light.shape == image.shape for light in components.values())
-    assert 0 < components["clumps"][2].sum() <= catalogue.clumps["flux_r_clump"].sum()
-    assert components["clumps"].min() > -1e-3 * components["clumps"].max()  # only rendering ringing below 0
+    assert 0 < components["sfregions"][2].sum() <= catalogue.clumps["flux_r_clump"].sum()
+    assert components["sfregions"].min() > -1e-3 * components["sfregions"].max()  # only rendering ringing below 0
     assert not components["spikes"].any()  # this catalogue has no stars
     assert components["tidal"].sum() < image.sum()
 

@@ -3,7 +3,7 @@
 For catalogue <name>, <out_dir>/<name>/ holds:
   base_clean_signal.npy           noise-free render at the narrow base PSF (float32, band x y x, nJy per pixel)
   base_<component>_signal.npy     the light of the star-forming clumps, the tidal features and the stars' diffraction
-                                  spikes alone (component = clumps, tidal, spikes), on the same grid: truth for
+                                  spikes alone (component = sfregions, tidal, spikes), on the same grid: truth for
                                   learning where each phenomenon is
   base_meta.json                  bands, canvas origin in frame pixels, shape, pixel scale, zeropoint and base PSF
   coadd_manifest.json             every coadd: visits and PSF FWHM per band, noise seed, and whether it was saved

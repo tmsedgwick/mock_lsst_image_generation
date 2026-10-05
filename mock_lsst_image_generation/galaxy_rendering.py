@@ -168,7 +168,7 @@ def split_stars(table):
 
 
 # Light rendered into the image that render_catalogue can also return on its own (truth for learning where it is).
-COMPONENT_IMAGES = ("clumps", "tidal", "spikes")
+COMPONENT_IMAGES = ("sfregions", "tidal", "spikes")
 
 
 def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1, star_seed=0, components_out=None):
@@ -198,13 +198,13 @@ def render_catalogue(catalogue, psf_fwhm, cfg, n_workers=1, star_seed=0, compone
 
     components = {name: np.zeros(shape, np.float32) for name in COMPONENT_IMAGES}
     blob_columns = ["x_img", "y_img", "sigma_arcsec", *[f"flux_{band}" for band in bands]]
-    blob_tables = [("clumps", catalogue.clumps, lambda table: clump_blobs(table, bands)),
+    blob_tables = [("sfregions", catalogue.clumps, lambda table: clump_blobs(table, bands)),
                    ("tidal", catalogue.tidal_blobs, lambda table: tidal_blobs(table, bands, cfg["pixscale"]))]
     for name, table, to_blobs in blob_tables:
         if len(table):
             blob_records = to_records(to_blobs(table), blob_columns, ["x_img", "y_img", "sigma_arcsec"], origin)
             components[name] = render_records(render_blob, blob_records, shape, psf_fwhm, cfg, n_workers,
-                                              "clumps" if name == "clumps" else "tidal blobs")
+                                              "clumps" if name == "sfregions" else "tidal blobs")
             image += components[name]
     if len(stars):
         image += render_stars(stars, shape, origin, psf_fwhm, cfg, np.random.default_rng([star_seed, 2]),
