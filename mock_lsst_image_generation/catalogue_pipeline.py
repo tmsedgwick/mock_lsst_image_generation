@@ -7,7 +7,7 @@ build_mock_catalogue runs, for one seed:
   4. sSFR from low-z COSMOS PDFs evolved to each redshift        (ssfr_sampling)
   5. cloned rest-frame SED -> observed ugrizy, bulge + disc      (rest_frame_sed_sampling, bulge_disc_decomposition)
   6. safety and render cuts
-  7. interacting pairs, star-forming clumps and tidal bridges    (tidal_stream_generation, sf_clump_generation)
+  7. interacting pairs, star-forming regions and tidal bridges    (tidal_stream_generation, sfregion_generation)
 """
 
 from pathlib import Path
@@ -28,7 +28,7 @@ from .lsb_galaxies import add_lsb_galaxies
 from .photometry import REST_COLS
 from .rest_frame_sed_sampling import (RestFrameEmpiricalPDF, build_rest_frame_donor_table, project_to_observed_frame,
                                       sample_rest_frame_properties)
-from .sf_clump_generation import add_sf_clumps
+from .sfregion_generation import add_sfregions
 from .stars import add_stars
 from .ssfr_sampling import build_low_redshift_ssfr_pdf, draw_log_ssfr
 from .tidal_stream_generation import add_tidal_streams, select_tidal_pairs
@@ -36,10 +36,11 @@ from .utils import combined_mask, print_cut_summary
 
 
 class MockCatalogue(NamedTuple):
-    """One realisation: the galaxy table, its clumps, tidal-bridge blobs and interacting pairs, plus the fitted
-    rest-frame PDF and the COSMOS donor table it was trained on (useful for diagnostics; None when read from disk)."""
+    """One realisation: the galaxy table, its star-forming regions, tidal-bridge blobs and interacting pairs, plus the
+    fitted rest-frame PDF and the COSMOS donor table it was trained on (useful for diagnostics; None when read from
+    disk)."""
     galaxies: pd.DataFrame
-    clumps: pd.DataFrame
+    sfregions: pd.DataFrame
     tidal_blobs: pd.DataFrame
     tidal_pairs: pd.DataFrame
     rest_frame_pdf: RestFrameEmpiricalPDF | None = None
@@ -103,7 +104,7 @@ def apply_mock_safety_cuts(mock, cfg):
     keep = combined_mask(checks, mock.index)
     if keep.all():
         return mock
-    print_cut_summary(f"Mock safety cuts kept {int(keep.sum()):,} / {len(mock):,} galaxies before clumps/tidal "
+    print_cut_summary(f"Mock safety cuts kept {int(keep.sum()):,} / {len(mock):,} galaxies before sfregions/tidal "
                       "streams", checks)
     out = mock.loc[keep].reset_index(drop=True)
     if "id" in out.columns:
@@ -153,17 +154,19 @@ def build_mock_catalogue(cosmos, cfg=None, phys=None):
     if cfg["assign_positions_after_observables"]:
         mock = assign_clustered_positions(mock, cfg, grids, rng)
 
-    if cfg["hubble_types"]:  # before the clumps, which follow the arms; own random stream, so nothing else changes
+    # Before the star-forming regions, which follow the arms; own random stream, so nothing else changes.
+    if cfg["hubble_types"]:
         mock = add_hubble_types(mock, np.random.default_rng([cfg["seed"], 2]))
     mock, tidal_pairs = select_tidal_pairs(mock, cfg, rng) if cfg["tidal_streams"] else (mock, pd.DataFrame())
-    if cfg["lsb_galaxies"]:  # after the tidal pairs, before the clumps (which they get too); own random stream
+    # After the tidal pairs, before the star-forming regions (which they get too); own random stream.
+    if cfg["lsb_galaxies"]:
         mock = add_lsb_galaxies(mock, donors, cfg, phys, grids, np.random.default_rng([cfg["seed"], 4]))
     if cfg["bcgs"]:  # own random stream
         mock = add_bcgs(mock, cfg, np.random.default_rng([cfg["seed"], 5]))
-    clumps, tidal_blobs = pd.DataFrame(), pd.DataFrame()
-    if cfg["sf_clumps"]:
-        print("Adding SF clumps...", flush=True)
-        mock, clumps = add_sf_clumps(mock, cfg, rng)
+    sfregions, tidal_blobs = pd.DataFrame(), pd.DataFrame()
+    if cfg["sfregions"]:
+        print("Adding star-forming regions...", flush=True)
+        mock, sfregions = add_sfregions(mock, cfg, rng)
     if cfg["tidal_streams"]:
         print("Adding tidal streams...", flush=True)
         mock, tidal_blobs = add_tidal_streams(mock, tidal_pairs, cfg, rng)
@@ -171,14 +174,14 @@ def build_mock_catalogue(cosmos, cfg=None, phys=None):
     print(np.nanpercentile(mock["projection_edge_distance"], [1, 16, 50, 84, 99]))
     if cfg["stars"]:  # own random stream, so the galaxies are identical with or without stars
         mock = add_stars(mock, cfg, np.random.default_rng([cfg["seed"], 1]))
-    return MockCatalogue(mock, clumps, tidal_blobs, tidal_pairs, pdf, donors)
+    return MockCatalogue(mock, sfregions, tidal_blobs, tidal_pairs, pdf, donors)
 
 
 def save_mock_catalogue(catalogue, out_csv):
-    """Write <stem>.csv (galaxies) plus <stem>_clumps.csv, <stem>_tidal.csv and <stem>_tidal_pairs.csv."""
+    """Write <stem>.csv (galaxies) plus <stem>_sfregions.csv, <stem>_tidal.csv and <stem>_tidal_pairs.csv."""
     stem = str(Path(out_csv).with_suffix(""))
     for table, path, label in [(catalogue.galaxies, f"{stem}.csv", "galaxies"),
-                               (catalogue.clumps, f"{stem}_clumps.csv", "clumps"),
+                               (catalogue.sfregions, f"{stem}_sfregions.csv", "sfregions"),
                                (catalogue.tidal_blobs, f"{stem}_tidal.csv", "tidal blobs"),
                                (catalogue.tidal_pairs, f"{stem}_tidal_pairs.csv", "tidal pairs")]:
         table.to_csv(path, index=False)
@@ -186,7 +189,7 @@ def save_mock_catalogue(catalogue, out_csv):
 
 
 def load_mock_catalogue(csv_path):
-    """Read a catalogue written by save_mock_catalogue (galaxies, clumps, tidal blobs and tidal pairs)."""
+    """Read a catalogue written by save_mock_catalogue (galaxies, star-forming regions, tidal blobs and tidal pairs)."""
     stem = str(Path(csv_path).with_suffix(""))
 
     def read(suffix):
@@ -194,7 +197,7 @@ def load_mock_catalogue(csv_path):
             return pd.read_csv(f"{stem}{suffix}.csv")
         except (FileNotFoundError, pd.errors.EmptyDataError):  # companions are empty when a feature is switched off
             return pd.DataFrame()
-    return MockCatalogue(read(""), read("_clumps"), read("_tidal"), read("_tidal_pairs"))
+    return MockCatalogue(read(""), read("_sfregions"), read("_tidal"), read("_tidal_pairs"))
 
 
 def generate_mock_catalogues(cosmos, n_catalogues=N_CATALOGUES, out_dir=".", cfg=None, phys=None, stem=CATALOGUE_STEM,

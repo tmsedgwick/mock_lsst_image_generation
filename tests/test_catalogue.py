@@ -14,11 +14,12 @@ from scipy.stats import poisson
 from mock_lsst_image_generation.config import OUT_BANDS
 from mock_lsst_image_generation import (CONFIG, DEFAULT_COSMOS_PATH, build_mock_catalogue, catalogue_splits,
                                         generate_mock_catalogues, load_cosmos2025_catalogue)
-from mock_lsst_image_generation.sf_clump_generation import target_clump_light_fraction
+from mock_lsst_image_generation.sfregion_generation import target_sfregion_light_fraction
 from mock_lsst_image_generation.utils import resolved_mask
 
 # Counts and column sums of the reference realisation (macOS, pinned requirements). Other platforms can differ in the
-# last few decimal places, which can flip galaxies across cuts. Clump counts are tested against their distribution
+# last few decimal places, which can flip galaxies across cuts. Star-forming region counts are tested against their
+# distribution
 # separately because changed hosts and rejection sampling can shift the subsequent random draws.
 REFERENCE_COUNTS = dict(galaxies=4254, tidal_pairs=2, donors=18476)
 REFERENCE_SUMS = dict(z=9245.306949574317, logM=33968.64030832245, mag_r_total=118973.79265390243)
@@ -82,35 +83,36 @@ def test_catalogue_is_physically_sane(catalogue):
     for band in OUT_BANDS:
         assert np.isfinite(g[f"mag_{band}_total"]).all() and (g[f"flux_{band}_total"] > 0).all(), band
     assert (g["sb_r_total"] <= CONFIG["render_mu_r_max"]).all()
-    assert set(catalogue.clumps["parent_id"]).issubset(g["id"])
+    assert set(catalogue.sfregions["parent_id"]).issubset(g["id"])
 
 
-def test_clump_counts_follow_host_population(catalogue):
+def test_sfregion_counts_follow_host_population(catalogue):
     # Rejection sampling and upstream cuts can change later random draws across platforms.
     # Check the capped Poisson population against its model, not one machine's realisation.
     g = catalogue.galaxies
-    re = g["re_disc_arcsec_preclump"]
+    re = g["re_disc_arcsec_before_sfregions"]
     hosts = g.loc[g["type"].eq("star_forming") & resolved_mask(g, CONFIG) & np.isfinite(re) & (re > 0)]
-    rate = target_clump_light_fraction(hosts["logM"], hosts["logSFR"]).to_numpy() / CONFIG["clump_mean_single_u_frac"]
-    k = np.arange(1, CONFIG["clump_n_max_per_gal"] + 1)[:, None]
+    rate = (target_sfregion_light_fraction(hosts["logM"], hosts["logSFR"]).to_numpy()
+            / CONFIG["sfregion_mean_single_u_frac"])
+    k = np.arange(1, CONFIG["sfregion_n_max_per_gal"] + 1)[:, None]
     survival = poisson.sf(k - 1, rate)
     mean = survival.sum(axis=0)
     variance = ((2 * k - 1) * survival).sum(axis=0) - mean**2
-    assert abs(len(catalogue.clumps) - mean.sum()) <= 6 * np.sqrt(variance.sum())
-    counts = catalogue.clumps.groupby("parent_id").size().reindex(g["id"], fill_value=0)
-    np.testing.assert_array_equal(counts.to_numpy(), g["N_clumps"].to_numpy())
-    assert counts.between(0, CONFIG["clump_n_max_per_gal"]).all()
-    assert set(catalogue.clumps["parent_id"]).issubset(hosts["id"])
+    assert abs(len(catalogue.sfregions) - mean.sum()) <= 6 * np.sqrt(variance.sum())
+    counts = catalogue.sfregions.groupby("parent_id").size().reindex(g["id"], fill_value=0)
+    np.testing.assert_array_equal(counts.to_numpy(), g["N_sfregions"].to_numpy())
+    assert counts.between(0, CONFIG["sfregion_n_max_per_gal"]).all()
+    assert set(catalogue.sfregions["parent_id"]).issubset(hosts["id"])
     for band in OUT_BANDS:
-        flux = catalogue.clumps.groupby("parent_id")[f"flux_{band}_clump"].sum().reindex(g["id"], fill_value=0)
-        np.testing.assert_allclose(flux.to_numpy(), g[f"flux_{band}_clump"].to_numpy())
-        np.testing.assert_allclose(g[f"flux_{band}_disc_preclump"],
-                                   g[f"flux_{band}_disc"] + g[f"flux_{band}_clump"] + g[f"flux_{band}_tidal"])
+        flux = catalogue.sfregions.groupby("parent_id")[f"flux_{band}_sfregion"].sum().reindex(g["id"], fill_value=0)
+        np.testing.assert_allclose(flux.to_numpy(), g[f"flux_{band}_sfregion"].to_numpy())
+        np.testing.assert_allclose(g[f"flux_{band}_disc_before_sfregions"],
+                                   g[f"flux_{band}_disc"] + g[f"flux_{band}_sfregion"] + g[f"flux_{band}_tidal"])
 
 
 def test_same_seed_same_catalogue_different_seed_differs(cosmos, catalogue):
     again = quiet(build_mock_catalogue, cosmos, dict(seed=42, npix=1000, stars=False))
-    for name in ("galaxies", "clumps", "tidal_pairs", "tidal_blobs"):
+    for name in ("galaxies", "sfregions", "tidal_pairs", "tidal_blobs"):
         assert getattr(again, name).equals(getattr(catalogue, name)), name
     other = quiet(build_mock_catalogue, cosmos, dict(seed=7, npix=1000, stars=False)).galaxies
     assert not other.equals(catalogue.galaxies)
@@ -121,7 +123,7 @@ def test_same_seed_same_catalogue_different_seed_differs(cosmos, catalogue):
 def test_generate_writes_all_csvs(cosmos, tmp_path):
     quiet(generate_mock_catalogues, cosmos, 1, tmp_path, cfg=dict(npix=300))
     stem = tmp_path / "mock_catalogue_train"
-    for suffix in ["", "_clumps", "_tidal", "_tidal_pairs"]:
+    for suffix in ["", "_sfregions", "_tidal", "_tidal_pairs"]:
         assert (tmp_path / f"{stem.name}{suffix}.csv").exists(), suffix
 
 

@@ -19,7 +19,7 @@ python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-
 - **Star formation, colours and sizes:** drawn from similar real galaxies in COSMOS2025 and shifted to each mock
   galaxy's redshift, giving LSST ugrizy photometry
 - **Structure:** bulge + disc
-- **Extras:** star-forming clumps and tidal bridges between interacting pairs
+- **Extras:** star-forming regions and tidal bridges between interacting pairs
 - **Stars:** bright LSST-like stars with band-dependent diffraction spikes, halos and saturated cores, calibrated on
   a real LSSTCam deep coadd (`stars.py`, settings in `STAR_CONFIG`)
 - **Hubble types:** each galaxy gets a type (E0-E7, S0, Sa-Sc, barred SB0-SBc, Irr), drawn with probabilities
@@ -87,7 +87,7 @@ Each catalogue writes four CSVs to `--out-dir`:
 | File | Contents |
 |---|---|
 | `mock_catalogue_<name>.csv` | Galaxies: position, redshift, environment, physical properties, and bulge/disc/total photometry and structure. Stars are extra rows with `type` = `star` |
-| `…_clumps.csv` | Star-forming clumps: parent id, offsets, width, per-band flux |
+| `…_sfregions.csv` | Star-forming regions: parent id, offsets, width, per-band flux |
 | `…_tidal.csv` | Tidal-bridge blobs: one row per blob and band |
 | `…_tidal_pairs.csv` | The interacting pairs |
 
@@ -131,10 +131,11 @@ For a single coadd, give either `--epoch` (`1m` to `11m` or `1y` to `10y`, at th
 `--n-exp` and `--psf-fwhm` (r-band visits and FWHM in arcsec; the other bands scale with LSST's 10-year visit plan and
 the nominal PSF ratios).
 
-Each catalogue is rendered once with GalSim (bulge + disc Sersic profiles, Gaussian clumps and tidal blobs) at a
-narrow 0.45″ PSF. Coadds are then made from that render for a grid of 7 survey depths (1 month, 6 months, 1, 3, 5, 8
-and 10 years of visits) × 6 seeings (r-band PSF FWHM 0.7″ to 2.0″), by broadening it to the target PSF and adding sky
-and source noise for that many visits. Depth and seeing vary independently, so a detector cannot learn to link them.
+Each catalogue is rendered once with GalSim (bulge + disc Sersic profiles, Gaussian star-forming regions and tidal
+blobs) at a narrow 0.45″ PSF. Coadds are then made from that render for a grid of 7 survey depths (1 month, 6 months, 1,
+3, 5, 8 and 10 years of visits) × 6 seeings (r-band PSF FWHM 0.7″ to 2.0″), by broadening it to the target PSF and
+adding sky and source noise for that many visits. Depth and seeing vary independently, so a detector cannot learn to
+link them.
 
 By default every coadd is listed in each catalogue's manifest and saved, except for `train` and `valid`: the training
 code rebuilds those on the fly from the saved base render and manifest, identically every time, so they take no disk
@@ -147,6 +148,7 @@ Rendering is the slow step; it runs in parallel over `--n-workers` processes (de
 | File | Contents |
 |---|---|
 | `base_clean_signal.npy` | Noise-free render at the 0.45″ base PSF, float32 (band, y, x) in nJy per pixel |
+| `base_sfregions_signal.npy`, `base_tidal_signal.npy`, `base_spikes_signal.npy` | The light of the star-forming regions, the tidal features and the stars' diffraction spikes alone, on the same grid: truth for learning where each is |
 | `base_meta.json` | Bands, canvas origin in frame pixels, shape, pixel scale, zeropoint, base PSF |
 | `coadd_manifest.json` | Every coadd: visits and PSF FWHM per band, noise seed, and whether it was saved |
 | `<catalogue>_<coadd>_signal.npy` | A saved coadd (nJy per pixel), e.g. `test_1y_fwhm110_signal.npy`, `test_10y_nominal_signal.npy` or `test_nexp50_fwhm130_signal.npy` |
@@ -236,7 +238,7 @@ from mock_lsst_image_generation import build_mock_catalogue, load_cosmos2025_cat
 
 cosmos = load_cosmos2025_catalogue()  # shipped subset; or pass a path
 cat = build_mock_catalogue(cosmos, dict(seed=7, npix=2000))  # any CONFIG key can be overridden
-cat.galaxies, cat.clumps, cat.tidal_blobs, cat.tidal_pairs
+cat.galaxies, cat.sfregions, cat.tidal_blobs, cat.tidal_pairs
 save_mock_catalogue(cat, "my_mock.csv")
 
 from mock_lsst_image_generation import generate_catalogue_images

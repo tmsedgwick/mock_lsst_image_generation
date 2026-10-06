@@ -23,13 +23,31 @@ def catalogue():
 
 
 @pytest.fixture(scope="module")
-def base_image(catalogue):
-    return render_catalogue(catalogue, {band: IMAGE_CONFIG["base_fwhm"] for band in IMAGE_CONFIG["bands"]},
-                            IMAGE_CONFIG)[0]
+def rendered(catalogue):
+    """(base image, {component: its light alone})."""
+    components = {}
+    image = render_catalogue(catalogue, {band: IMAGE_CONFIG["base_fwhm"] for band in IMAGE_CONFIG["bands"]},
+                             IMAGE_CONFIG, components_out=components)[0]
+    return image, components
+
+
+@pytest.fixture(scope="module")
+def base_image(rendered):
+    return rendered[0]
+
+
+def test_component_images_hold_their_own_light(catalogue, rendered):
+    image, components = rendered
+    assert set(components) == {"sfregions", "tidal", "spikes"}
+    assert all(light.shape == image.shape for light in components.values())
+    assert 0 < components["sfregions"][2].sum() <= catalogue.sfregions["flux_r_sfregion"].sum()
+    assert components["sfregions"].min() > -1e-3 * components["sfregions"].max()  # only rendering ringing below 0
+    assert not components["spikes"].any()  # this catalogue has no stars
+    assert components["tidal"].sum() < image.sum()
 
 
 def test_render_keeps_catalogue_flux(catalogue, base_image):
-    total_r = catalogue.galaxies["flux_r_total"].sum() + catalogue.clumps["flux_r_clump"].sum()
+    total_r = catalogue.galaxies["flux_r_total"].sum() + catalogue.sfregions["flux_r_sfregion"].sum()
     # The canvas encloses galaxy centres, so its dimensions depend on the realisation.
     g = catalogue.galaxies
     nx = int(np.ceil(g["x_pix"].max()) - np.floor(g["x_pix"].min())) + 1

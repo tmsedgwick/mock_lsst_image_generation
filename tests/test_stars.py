@@ -41,6 +41,11 @@ def test_bright_star_gets_striped_saturated_core():
     image = render_stars(star, (6, 201, 201), (0, 0), {b: IMAGE_CONFIG["base_fwhm"] for b in "ugrizy"}, IMAGE_CONFIG,
                          np.random.default_rng(4))
     assert image[2].sum() > 0.9 * star["flux_r_total"].iloc[0]  # most of the light lands in the stamp
+    spikes = np.zeros_like(image)
+    again = render_stars(star, (6, 201, 201), (0, 0), {b: IMAGE_CONFIG["base_fwhm"] for b in "ugrizy"}, IMAGE_CONFIG,
+                         np.random.default_rng(4), spikes_out=spikes)
+    assert np.array_equal(again, image)  # collecting the spikes does not change the render
+    assert 0 < spikes[2].sum() < 0.05 * image[2].sum() and (spikes >= 0).all()
     coadd = single_coadd(0, IMAGE_CONFIG, epoch="10y")["10y_nominal"]
     signal, _ = synthesise_coadd(image, coadd, IMAGE_CONFIG, star, (0, 0))
     core = signal[2, 95:106, 95:106]
