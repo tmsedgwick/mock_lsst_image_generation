@@ -113,9 +113,12 @@ CONFIG: dict[str, Any] = dict(
     # Extended dwarf irregulars, UDGs and almost-dark galaxies (lsb_galaxies.py), added on top of the realistic
     # population in deliberately generous numbers (per deg^2) so a detector sees enough of them; each population is
     # drawn within its observed ranges of redshift, Re (kpc) and central g-band surface brightness mu0_g.
-    # A few BCG-like core-Sersic sources (BCG core + extended envelope; bcg_sources.py,
-    # ICL_DoubleSersic_Injection.ipynb)
-    # per frame: Re (arcsec) log-uniform and mean r-band SB within the half-light area mu_r uniform in these ranges.
+    # BCG-like core-Sersic sources (BCG core + extended envelope; bcg_sources.py, ICL_DoubleSersic_Injection.ipynb):
+    # Re (arcsec) log-uniform and mean r-band SB within the half-light area mu_r uniform in these ranges.
+    # The rates keep these classes rare enough not to crowd a frame (their footprints cover ~2% of it) while a
+    # training frame of ~0.6 deg^2 (14000 x 14000 px; scripts/generate_large_training_frame.py) holds several hundred
+    # of each: ~480 UDGs, ~480 extended dIrrs, ~240 almost-dark galaxies, ~24 BCGs. A 5000 x 5000 px frame holds ~1/8
+    # of that. Almost-dark galaxies are drawn 4x as often as the others' rate would suggest, being the rarest.
     bcgs=True, bcg_per_deg2=40, bcg_re_arcsec=(5.0, 30.0), bcg_mu_r=(20.0, 25.0),
     lsb_galaxies=True,
     lsb_populations=dict(
@@ -123,7 +126,7 @@ CONFIG: dict[str, Any] = dict(
                            donors="star_forming", irregularity=(0.5, 0.1)),
         udg=dict(per_deg2=800, z=(0.02, 0.06), re_kpc=(1.5, 5.0), mu0_g=(24.0, 27.0), quiescent_frac=0.25,
                  donors="star_forming", irregularity=(0.5, 0.1)),
-        almost_dark=dict(per_deg2=100, z=(0.003, 0.03), re_kpc=(1.5, 3.5), mu0_g=(26.0, 28.0), quiescent_frac=0.0,
+        almost_dark=dict(per_deg2=400, z=(0.003, 0.03), re_kpc=(1.5, 3.5), mu0_g=(26.0, 28.0), quiescent_frac=0.0,
                          donors="bluest", irregularity=(0.8, 0.05)),
     ),
 )
