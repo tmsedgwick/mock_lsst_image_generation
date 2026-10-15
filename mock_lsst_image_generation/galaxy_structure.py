@@ -27,6 +27,7 @@ N_VERTICAL_NODES = 3
 N_IRREGULAR_MODES = 5
 EXTENT_H = 6.0  # structure is computed out to this many scale lengths from the centre
 OVERSAMPLE = 3  # sub-pixels per pixel side: pixel-integrated like GalSim's disc, so thin discs subtract cleanly
+STRIP_CELLS = 4_000_000  # grid cells worked on at once by structure_images (each float64 array is then 32 MB)
 SERSIC_B1 = 1.678  # half-light radius / scale length of an exponential disc
 
 
@@ -80,10 +81,9 @@ def structure_weight(record, u, v):
     return shaped / np.maximum(smooth, 1e-300)
 
 
-def structure_images(record, x_offsets, y_offsets):
-    """(bar, arms, depth, disc) for a grid of sky offsets (arcsec) from the galaxy centre: the bar and arm / clump
-    images per unit disc flux, the deepest fraction of the barred disc's light the arms remove anywhere, and the
-    barred disc itself (unit sum)."""
+def disc_layers(record, x_offsets, y_offsets):
+    """(smooth, barred, shaped) disc surface brightness, unnormalised, on a grid of sky offsets (arcsec) from the
+    galaxy centre, integrated through the disc's thickness."""
     h = float(record["re_disc_arcsec"]) / SERSIC_B1
     pa = np.radians(float(record["pa_deg"]))
     x, y = np.meshgrid(x_offsets, y_offsets)
@@ -98,9 +98,35 @@ def structure_images(record, x_offsets, y_offsets):
         # GalSim's shear keeps area (re is the circularised radius), so the disc plane is scaled by sqrt(cos i) too.
         layer = face_on_disc(major * np.sqrt(cos_i), (minor + z * sin_i) / np.sqrt(cos_i), record, h, modes)
         smooth, barred, shaped = smooth + weight * layer[0], barred + weight * layer[1], shaped + weight * layer[2]
-    arms = shaped * barred.sum() / shaped.sum() - barred  # rescaled so arms / clumps only move light
-    depth = float(np.max(-arms / np.maximum(barred, 1e-30 * barred.max())))
-    return barred / barred.sum() - smooth / smooth.sum(), arms / barred.sum(), depth, barred / barred.sum()
+    return smooth, barred, shaped
+
+
+def structure_images(record, x_offsets, y_offsets, bin_size=1):
+    """(bar, arms, depth, disc) for a grid of sky offsets (arcsec) from the galaxy centre: the bar and arm / clump
+    images per unit disc flux, the deepest fraction of the barred disc's light the arms remove anywhere, and the
+    barred disc itself (unit sum). Images are summed over bin_size x bin_size blocks of the grid.
+
+    A large, inclined disc's grid can be far too big for memory, so it is worked through in strips of rows: a first
+    pass finds the totals the images are normalised by, a second builds and bins each strip."""
+    rows = max(1, STRIP_CELLS // (len(x_offsets) * bin_size)) * bin_size
+    strips = [slice(start, start + rows) for start in range(0, len(y_offsets), rows)]
+    layers = disc_layers(record, x_offsets, y_offsets[strips[0]]) if len(strips) == 1 else None
+    smooth_sum = barred_sum = shaped_sum = barred_max = 0.0
+    for strip in strips:
+        smooth, barred, shaped = layers or disc_layers(record, x_offsets, y_offsets[strip])
+        smooth_sum, barred_sum, shaped_sum = smooth_sum + smooth.sum(), barred_sum + barred.sum(), shaped_sum + shaped.sum()
+        barred_max = max(barred_max, barred.max())
+
+    binned = lambda a: a.reshape(a.shape[0] // bin_size, bin_size, a.shape[1] // bin_size, bin_size).sum(axis=(1, 3))
+    bar, arms, disc, depth = [], [], [], -np.inf
+    for strip in strips:
+        smooth, barred, shaped = layers or disc_layers(record, x_offsets, y_offsets[strip])
+        strip_arms = shaped * barred_sum / shaped_sum - barred  # rescaled so arms / clumps only move light
+        depth = max(depth, float(np.max(-strip_arms / np.maximum(barred, 1e-30 * barred_max))))
+        bar.append(binned(barred / barred_sum - smooth / smooth_sum))
+        arms.append(binned(strip_arms / barred_sum))
+        disc.append(binned(barred / barred_sum))
+    return np.vstack(bar), np.vstack(arms), depth, np.vstack(disc)
 
 
 def has_structure(record, min_re_arcsec):
@@ -127,9 +153,7 @@ def add_structure(cube, xmin, ymin, record, bands, psf_fwhm, pixscale):
     sub = (np.arange(OVERSAMPLE) + 0.5) / OVERSAMPLE - 0.5
     offsets = lambda start, stop, centre: ((np.arange(start, stop)[:, None] + sub).ravel() - centre) * pixscale
     bar, arms, depth, disc = structure_images(record, offsets(xmin + x0, xmin + x1, record["x_img"]),
-                                              offsets(ymin + y0, ymin + y1, record["y_img"]))
-    shape = (y1 - y0, OVERSAMPLE, x1 - x0, OVERSAMPLE)
-    bar, arms, disc = (a.reshape(shape).sum(axis=(1, 3)) for a in (bar, arms, disc))
+                                              offsets(ymin + y0, ymin + y1, record["y_img"]), OVERSAMPLE)
     # Arms are bluer (ARM_COLOUR_BOOST) than the rest of the disc. The extra (or missing) light of each band's arms is
     # balanced across the whole disc in proportion to its light, not taken from between the arms, so the inter-arm
     # disc keeps the disc's colour instead of turning into a separate red glow.

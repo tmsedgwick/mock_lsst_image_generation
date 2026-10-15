@@ -27,11 +27,13 @@ python scripts/generate_mock_images.py --catalogue-dir ~/mocks/catalogues --out-
   and bar fractions (Erwin 2018; Melvin et al. 2014). Resolved discs are drawn with the spiral arms, bar or
   irregular clumps of their type, as light moved within the disc so band fluxes are unchanged (`hubble_types.py`,
   `galaxy_structure.py`)
-- **BCG-like sources:** a few core-Sersic envelopes (BCG core + extended diffuse light; Graham et al. 2003 profile
-  with the parameters and photometry of `ICL_DoubleSersic_Injection.ipynb`) per frame (`bcg_sources.py`; `bcgs`,
+- **BCG-like sources:** core-Sersic envelopes (BCG core + extended diffuse light; Graham et al. 2003 profile
+  with the parameters and photometry of `ICL_DoubleSersic_Injection.ipynb`), 40 per deg^2 (`bcg_sources.py`; `bcgs`,
   `bcg_per_deg2`, `bcg_re_arcsec`, `bcg_mu_r` in `CONFIG`); rows have `profile` = `core_sersic`
-- **Extended dwarfs, UDGs and almost-dark galaxies:** added on top of the realistic population in deliberately
-  generous numbers so a detector sees enough of them (`lsb_galaxies.py`, rates in `CONFIG["lsb_populations"]`):
+- **Extended dwarfs, UDGs and almost-dark galaxies:** added on top of the realistic population in generous but
+  uncrowded numbers (their footprints cover ~2% of a frame; `lsb_galaxies.py`, rates in `CONFIG["lsb_populations"]`:
+  800 UDGs and 800 extended dIrrs per deg^2, almost-dark galaxies 400). A 0.6 deg^2 training frame (below, *Large
+  training frames*) then holds several hundred of each:
   extended star-forming dIrrs, ultra-diffuse galaxies (van Dokkum et al. 2015 definition; mostly blue and irregular
   in the field, Leisman et al. 2017) and almost-dark galaxies with barely visible, very blue, irregular light
   (ALFALFA examples AGC 229385 and AGC 229101), each drawn within its observed size and surface-brightness range
@@ -46,6 +48,7 @@ and `IMAGE_CONFIG` for the images); pass a partial dict to override any of them.
 | `mock_lsst_image_generation/` | The package: one module per model ingredient, `config.py` for all settings |
 | `scripts/generate_mock_catalogues.py` | Command: build the catalogues |
 | `scripts/generate_mock_images.py` | Command: render the catalogues into images |
+| `scripts/generate_large_training_frame.py` | Command: one large training frame (e.g. 14000 x 14000 px), built as independent parts and stitched |
 | `data/cosmos2025_subset.npz` | Shipped COSMOS2025 input (see below) |
 | `tests/` | pytest suite, run by GitHub Actions on every push |
 
@@ -156,6 +159,25 @@ Rendering is the slow step; it runs in parallel over `--n-workers` processes (de
 
 Bands are in `ugrizy` order. A catalogue position (`x_pix`, `y_pix`) falls in array pixel
 `[:, round(y_pix) - origin_y, round(x_pix) - origin_x]`, with `origin` from `base_meta.json`.
+
+### Large training frames
+
+A detector learns the rare classes (UDGs, extended dIrrs, almost-dark galaxies, BCGs) only if it sees hundreds of
+each. Raising their rates in a small frame crowds it (diffuse light everywhere, LSB galaxies overlapping) and teaches a
+sky that does not exist, so make the training frame larger instead: at the default rates a 14000 x 14000 px frame
+(0.6 deg^2) holds ~480 UDGs, ~480 extended dIrrs, ~240 almost-dark galaxies and ~24 BCGs, with LSB footprints covering
+~2% of it. Rendering it at once needs ~19 GB of memory, so it is built as independent parts and stitched:
+
+```bash
+python scripts/generate_large_training_frame.py --out-dir ~/mocks_large --parts-per-side 2 --part-npix 7000
+```
+
+This writes a `train` split (catalogues and images, coadds rebuilt on the fly) to use with the usual valid, calib and
+test splits. Galaxies on a seam lose the light that fell outside their own part, and structure does not continue
+across seams; both are negligible for training. Each 7000 px part takes about an hour on a laptop; `--parts` builds
+only some of them, so two shells can share the work (`--parts 0 1` and `--parts 2 3`), and the frame is stitched once
+all are done. The frame and its component images take 19 GB, and training reads its tiles at random: keep it on a
+fast local disk (from a USB drive training ran about ten times slower).
 
 ## Example commands
 
