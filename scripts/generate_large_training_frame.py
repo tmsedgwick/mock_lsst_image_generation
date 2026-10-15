@@ -9,7 +9,13 @@ component images in memory (~19 GB at 14000 px); here each part is built and ren
 
 writes <out-dir>/catalogues/mock_catalogue_train*.csv and <out-dir>/images/train/ (base image, component images,
 base_meta.json, coadd_manifest.json; coadds are rebuilt on the fly in training, as for the usual train split), with the
-parts kept under <out-dir>/parts/. A finished part is not rebuilt if the script is run again.
+parts kept under <out-dir>/parts/. A finished part is not rebuilt if the script is run again. Each 7000 px part takes
+about an hour on a laptop; parts are independent, so they can be built in parallel with --parts, e.g. in two shells
+
+    python scripts/generate_large_training_frame.py --out-dir ~/mocks_large --parts 0 1
+    python scripts/generate_large_training_frame.py --out-dir ~/mocks_large --parts 2 3
+
+and the frame is stitched by whichever run finds all parts finished (or by a final run without --parts).
 
 Part (i, j) is shifted by (part_npix i, part_npix j) px and its ids (galaxies, stars, star-forming region parents, tidal
 donors and pairs) are offset so they stay unique. Galaxies within a few px of a seam lose the light that fell outside
@@ -32,15 +38,18 @@ IMAGES = ("base_clean_signal.npy", "base_sfregions_signal.npy", "base_tidal_sign
 SUFFIXES = ("", "_sfregions", "_tidal", "_tidal_pairs")
 
 
-def build_parts(out_dir, n_side, part_npix, first_seed, cosmos_path, n_workers):
+def part_done(out_dir, k):
+    return (out_dir / "parts" / f"part{k}" / "images" / "train" / "coadd_manifest.json").exists()
+
+
+def build_parts(out_dir, parts, part_npix, first_seed, cosmos_path, n_workers):
     cosmos = load_cosmos2025_catalogue(cosmos_path)
-    for k in range(n_side * n_side):
+    for k in parts:
         part = out_dir / "parts" / f"part{k}"
-        if (part / "images" / "train" / "coadd_manifest.json").exists():
+        if part_done(out_dir, k):
             print(f"part {k} already built", flush=True)
             continue
-        print(f"\n===== part {k + 1} of {n_side * n_side}: seed {first_seed + k}, {part_npix} x {part_npix} px =====",
-              flush=True)
+        print(f"\n===== part {k}: seed {first_seed + k}, {part_npix} x {part_npix} px =====", flush=True)
         catalogue = build_mock_catalogue(cosmos, dict(npix=part_npix, seed=first_seed + k))
         (part / "catalogues").mkdir(parents=True, exist_ok=True)
         save_mock_catalogue(catalogue, part / "catalogues" / "mock_catalogue_train.csv")
@@ -115,8 +124,18 @@ def main():
     parser.add_argument("--seed", type=int, default=4242, help="seed of the first part; the others follow it")
     parser.add_argument("--cosmos", type=Path, default=DEFAULT_COSMOS_PATH, help="COSMOS2025 .npz")
     parser.add_argument("--workers", type=int, default=4, help="rendering processes (default 4)")
+    parser.add_argument("--parts", type=int, nargs="+",
+                        help="build only these parts (0 to n^2 - 1, row by row), e.g. to build parts in parallel")
     args = parser.parse_args()
-    build_parts(args.out_dir, args.parts_per_side, args.part_npix, args.seed, args.cosmos, args.workers)
+    n_parts = args.parts_per_side ** 2
+    parts = args.parts if args.parts is not None else list(range(n_parts))
+    if not all(0 <= k < n_parts for k in parts):
+        parser.error(f"--parts must lie between 0 and {n_parts - 1}")
+    build_parts(args.out_dir, parts, args.part_npix, args.seed, args.cosmos, args.workers)
+    missing = [k for k in range(n_parts) if not part_done(args.out_dir, k)]
+    if missing:
+        print(f"Parts {missing} are not built yet: stitching waits for them", flush=True)
+        return
     stitch(args.out_dir, args.parts_per_side, args.part_npix)
 
 

@@ -174,7 +174,10 @@ python scripts/generate_large_training_frame.py --out-dir ~/mocks_large --parts-
 
 This writes a `train` split (catalogues and images, coadds rebuilt on the fly) to use with the usual valid, calib and
 test splits. Galaxies on a seam lose the light that fell outside their own part, and structure does not continue
-across seams; both are negligible for training.
+across seams; both are negligible for training. Each 7000 px part takes about an hour on a laptop; `--parts` builds
+only some of them, so two shells can share the work (`--parts 0 1` and `--parts 2 3`), and the frame is stitched once
+all are done. The frame and its component images take 19 GB, and training reads its tiles at random: keep it on a
+fast local disk (from a USB drive training ran about ten times slower).
 
 ## Example commands
 
